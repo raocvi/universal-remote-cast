@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="es"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Universal Remote</title>
+<script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+<style>
+  html,body{margin:0;padding:0;height:100%;background:#07070b;color:#fff;
+    font-family:-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;overflow:hidden}
+  #bg{position:absolute;top:0;left:0;right:0;bottom:0;background-position:center;background-size:cover;
+    opacity:0;transition:opacity .6s ease}
+  /* Tráiler de Clips: el reproductor de YouTube llena el TV; la ficha queda encima, abajo */
+  #ytwrap{position:absolute;top:0;left:0;right:0;bottom:0;display:none;background:#000;overflow:hidden}
+  #ytwrap iframe{position:absolute;top:50%;left:50%;width:100vw;height:56.25vw;min-height:100vh;min-width:177.78vh;-webkit-transform:translate(-50%,-50%);transform:translate(-50%,-50%);border:0}
+  body.yt #ytwrap{display:block}
+  body.yt .frame,body.yt #bg{display:none!important}
+  body.yt #scrim{background:-webkit-linear-gradient(top,rgba(4,4,8,0) 0%,rgba(4,4,8,0) 45%,rgba(4,4,8,.92) 100%);background:linear-gradient(180deg,rgba(4,4,8,0) 0%,rgba(4,4,8,0) 45%,rgba(4,4,8,.92) 100%)}
+  body.yt #wrap{display:block;padding:0}
+  body.yt #info{position:absolute;left:5vw;right:5vw;bottom:6vh;max-width:none}
+  body.yt #idle,body.yt #poster{display:none!important}
+  #scrim{position:absolute;top:0;left:0;right:0;bottom:0;
+    background:linear-gradient(90deg,rgba(4,4,8,.97) 0%,rgba(4,4,8,.86) 45%,rgba(4,4,8,.5) 100%)}
+  #wrap{position:relative;height:100%;display:-webkit-box;display:flex;
+    -webkit-box-align:center;align-items:center;padding:4.5vh 5vw;-webkit-box-sizing:border-box;box-sizing:border-box}
+  #poster{width:23vw;max-width:330px;border-radius:14px;background:#15151c;
+    box-shadow:0 20px 60px rgba(0,0,0,.65);margin-right:4vw;display:none}
+  #info{max-width:64vw}
+  #title{font-size:5vw;line-height:1.06;font-weight:800;letter-spacing:-.02em;margin:0 0 1.6vh}
+  #meta{font-size:1.9vw;color:#9ea3b5;margin-bottom:2vh}
+  #meta span{margin-right:1.6vw}
+  #star{color:#ffb02e}
+  #tag{font-size:2vw;color:#7fb3ff;font-style:italic;margin-bottom:1.8vh}
+  #ov{font-size:1.85vw;line-height:1.55;color:#d7dae4;max-width:52vw}
+  #idle{text-align:center;width:100%}
+  #idle h1{font-size:4.2vw;margin:0 0 2vh;font-weight:800}
+  #idle p{font-size:2vw;color:#9ea3b5;margin:0}
+  #foot{position:absolute;right:3vw;bottom:2.4vh;font-size:1.25vw;color:#4a4f60}
+  .frame{position:absolute;top:50%;left:50%;-webkit-transform:translate(-50%,-50%);transform:translate(-50%,-50%);
+    height:94vh;width:auto;border-radius:2.6vh;background:#000;
+    box-shadow:0 24px 80px rgba(0,0,0,.7);display:none}
+  .hide{display:none!important}
+
+  /* ── Bienvenida a pantalla completa: la primera imagen que ve el usuario del espejo.
+        Dos halos de luz que respiran, logotipo que entra con escala, textos en cascada
+        y una línea de progreso con destello. Sale con fundido cuando llega lo primero
+        del teléfono (mínimo 2,4 s en pantalla). Sin movimiento si el TV lo pide. ── */
+  #welcome{position:absolute;top:0;left:0;right:0;bottom:0;z-index:50;background:#06060a;overflow:hidden;
+    display:-webkit-box;display:flex;-webkit-box-align:center;align-items:center;-webkit-box-pack:center;justify-content:center;
+    -webkit-transition:opacity .7s ease,-webkit-transform .7s ease;transition:opacity .7s ease,transform .7s ease}
+  #welcome.out{opacity:0;-webkit-transform:scale(1.04);transform:scale(1.04);pointer-events:none}
+  /* Video cinematográfico de apertura (lo sirve el teléfono): tapa todo mientras dura;
+     al terminar (o si el navegador del TV no lo reproduce) entra la bienvenida animada. */
+  #wvid{position:absolute;top:0;left:0;width:100%;height:100%;-o-object-fit:cover;object-fit:cover;background:#000;z-index:5}
+  #welcome.playing #wcol,#welcome.playing .halo,#welcome.playing #wring,#welcome.playing #wring2,#welcome.playing #wdots,#welcome.playing #wfoot{display:none}
+  #welcome:not(.playing) #wvid{display:none}
+  /* Mientras dura video + bienvenida, nada del teléfono se pinta debajo (en el Samsung el
+     plano del video dejaba ver el fotograma a la izquierda durante la bienvenida). */
+  body.welcoming .frame,body.welcoming #wrap,body.welcoming #bg,body.welcoming #scrim,body.welcoming #foot{display:none!important}
+  #welcome .halo{position:absolute;border-radius:50%;-webkit-filter:blur(6vw);filter:blur(6vw);opacity:.55}
+  #welcome .h1{width:46vw;height:46vw;left:-8vw;top:-14vw;background:#0a84ff;
+    -webkit-animation:driftA 14s ease-in-out infinite alternate;animation:driftA 14s ease-in-out infinite alternate}
+  #welcome .h2{width:40vw;height:40vw;right:-10vw;bottom:-16vw;background:#ff375f;opacity:.42;
+    -webkit-animation:driftB 17s ease-in-out infinite alternate;animation:driftB 17s ease-in-out infinite alternate}
+  #welcome .h3{width:30vw;height:30vw;left:38vw;top:52vh;background:#5e5ce6;opacity:.3;
+    -webkit-animation:driftC 11s ease-in-out infinite alternate;animation:driftC 11s ease-in-out infinite alternate}
+  #welcome .grain{position:absolute;top:0;left:0;right:0;bottom:0;
+    background:radial-gradient(ellipse at center,rgba(255,255,255,.05) 0%,rgba(0,0,0,0) 60%)}
+  /* anillo de luz que gira detrás del logotipo */
+  #wring{position:absolute;left:50%;top:50%;width:34vw;height:34vw;margin:-17vw 0 0 -17vw;border-radius:50%;
+    background:conic-gradient(from 0deg,rgba(10,132,255,0) 0deg,rgba(10,132,255,.55) 70deg,rgba(255,55,95,.35) 150deg,rgba(10,132,255,0) 220deg,rgba(94,92,230,.45) 300deg,rgba(10,132,255,0) 360deg);
+    -webkit-mask:radial-gradient(circle,transparent 62%,#000 63%,#000 66%,transparent 67%);mask:radial-gradient(circle,transparent 62%,#000 63%,#000 66%,transparent 67%);
+    opacity:.85;-webkit-animation:spin 9s linear infinite,ringIn 1.4s ease-out both;animation:spin 9s linear infinite,ringIn 1.4s ease-out both}
+  #wring2{position:absolute;left:50%;top:50%;width:46vw;height:46vw;margin:-23vw 0 0 -23vw;border-radius:50%;
+    border:1px solid rgba(255,255,255,.08);-webkit-animation:spinBack 26s linear infinite,ringIn 1.8s ease-out both;animation:spinBack 26s linear infinite,ringIn 1.8s ease-out both}
+  /* partículas que flotan */
+  .dot{position:absolute;width:.5vw;height:.5vw;border-radius:50%;background:#fff;opacity:0;
+    -webkit-animation:floatUp linear infinite;animation:floatUp linear infinite}
+  #wcol{position:relative;text-align:center;max-width:70vw}
+  #wlogo{width:7.2vw;height:7.2vw;margin:0 auto 2.6vh;border-radius:1.8vw;
+    background:-webkit-linear-gradient(315deg,#0a84ff,#5e5ce6);background:linear-gradient(135deg,#0a84ff,#5e5ce6);
+    display:-webkit-box;display:flex;-webkit-box-align:center;align-items:center;-webkit-box-pack:center;justify-content:center;
+    box-shadow:0 0 0 .35vw rgba(10,132,255,.18),0 18px 60px rgba(10,132,255,.45);
+    -webkit-animation:logoIn 1s cubic-bezier(.2,.9,.2,1.2) both,glow 3.2s ease-in-out 1s infinite;animation:logoIn 1s cubic-bezier(.2,.9,.2,1.2) both,glow 3.2s ease-in-out 1s infinite}
+  #wlogo svg{width:56%;height:56%}
+  #weye{font-size:1.1vw;letter-spacing:.34em;text-transform:uppercase;color:#8fb8ff;font-weight:700;margin-bottom:1.6vh;
+    -webkit-animation:rise .8s ease-out .35s both;animation:rise .8s ease-out .35s both}
+  #whello{font-size:2.2vw;font-weight:700;color:#fff;margin:0 0 1vh;letter-spacing:-.01em;
+    -webkit-animation:rise .8s ease-out .45s both;animation:rise .8s ease-out .45s both}
+  #whello.gone{display:none}
+  #wtitle{font-size:4.6vw;line-height:1.05;font-weight:800;letter-spacing:-.02em;margin:0 0 1.8vh;color:#fff;
+    background:-webkit-linear-gradient(left,#fff 0%,#fff 40%,#8fb8ff 50%,#fff 60%,#fff 100%);background:linear-gradient(90deg,#fff 0%,#fff 40%,#8fb8ff 50%,#fff 60%,#fff 100%);
+    background-size:220% 100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+    -webkit-animation:rise .8s ease-out .55s both,sheen 4.5s ease-in-out 1.6s infinite;animation:rise .8s ease-out .55s both,sheen 4.5s ease-in-out 1.6s infinite}
+  #wsub{font-size:1.7vw;line-height:1.5;color:#b9bfd1;margin:0 auto 4vh;max-width:56vw;
+    -webkit-animation:rise .8s ease-out .75s both;animation:rise .8s ease-out .75s both}
+  #wbar{position:relative;width:20vw;height:.32vw;margin:0 auto 1.6vh;border-radius:.2vw;background:rgba(255,255,255,.12);overflow:hidden;
+    -webkit-animation:rise .8s ease-out .95s both;animation:rise .8s ease-out .95s both}
+  #wbar i{position:absolute;top:0;bottom:0;left:-40%;width:40%;border-radius:.2vw;
+    background:-webkit-linear-gradient(left,rgba(10,132,255,0),#7fb3ff,rgba(10,132,255,0));background:linear-gradient(90deg,rgba(10,132,255,0),#7fb3ff,rgba(10,132,255,0));
+    -webkit-animation:shimmer 1.6s ease-in-out infinite;animation:shimmer 1.6s ease-in-out infinite}
+  #wconn{font-size:1.15vw;color:#7d8397;letter-spacing:.06em;
+    -webkit-animation:rise .8s ease-out 1.1s both;animation:rise .8s ease-out 1.1s both}
+  #wfull{margin-top:2.2vh;font-size:1.05vw;color:#5c6376;letter-spacing:.04em;
+    -webkit-animation:rise .8s ease-out 1.4s both;animation:rise .8s ease-out 1.4s both}
+  #wfull.gone{display:none}
+  #wfoot{position:absolute;right:3vw;bottom:2.4vh;font-size:1.2vw;color:#4a4f60}
+  @-webkit-keyframes driftA{from{-webkit-transform:translate(0,0) scale(1)}to{-webkit-transform:translate(9vw,7vw) scale(1.18)}}
+  @keyframes driftA{from{transform:translate(0,0) scale(1)}to{transform:translate(9vw,7vw) scale(1.18)}}
+  @-webkit-keyframes driftB{from{-webkit-transform:translate(0,0) scale(1.1)}to{-webkit-transform:translate(-8vw,-6vw) scale(.92)}}
+  @keyframes driftB{from{transform:translate(0,0) scale(1.1)}to{transform:translate(-8vw,-6vw) scale(.92)}}
+  @-webkit-keyframes logoIn{from{opacity:0;-webkit-transform:scale(.6) translateY(2vh)}to{opacity:1;-webkit-transform:scale(1) translateY(0)}}
+  @keyframes logoIn{from{opacity:0;transform:scale(.6) translateY(2vh)}to{opacity:1;transform:scale(1) translateY(0)}}
+  @-webkit-keyframes glow{0%,100%{box-shadow:0 0 0 .35vw rgba(10,132,255,.18),0 18px 60px rgba(10,132,255,.45)}50%{box-shadow:0 0 0 .6vw rgba(10,132,255,.1),0 22px 80px rgba(10,132,255,.7)}}
+  @keyframes glow{0%,100%{box-shadow:0 0 0 .35vw rgba(10,132,255,.18),0 18px 60px rgba(10,132,255,.45)}50%{box-shadow:0 0 0 .6vw rgba(10,132,255,.1),0 22px 80px rgba(10,132,255,.7)}}
+  @-webkit-keyframes rise{from{opacity:0;-webkit-transform:translateY(2.2vh)}to{opacity:1;-webkit-transform:translateY(0)}}
+  @keyframes rise{from{opacity:0;transform:translateY(2.2vh)}to{opacity:1;transform:translateY(0)}}
+  @-webkit-keyframes shimmer{from{left:-40%}to{left:100%}}
+  @keyframes shimmer{from{left:-40%}to{left:100%}}
+  @-webkit-keyframes driftC{from{-webkit-transform:translate(0,0) scale(1)}to{-webkit-transform:translate(-10vw,-12vh) scale(1.25)}}
+  @keyframes driftC{from{transform:translate(0,0) scale(1)}to{transform:translate(-10vw,-12vh) scale(1.25)}}
+  @-webkit-keyframes spin{from{-webkit-transform:rotate(0)}to{-webkit-transform:rotate(360deg)}}
+  @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+  @-webkit-keyframes spinBack{from{-webkit-transform:rotate(0)}to{-webkit-transform:rotate(-360deg)}}
+  @keyframes spinBack{from{transform:rotate(0)}to{transform:rotate(-360deg)}}
+  @-webkit-keyframes ringIn{from{opacity:0;-webkit-transform:scale(.7)}to{opacity:1;-webkit-transform:scale(1)}}
+  @keyframes ringIn{from{opacity:0;transform:scale(.7)}to{opacity:1;transform:scale(1)}}
+  @-webkit-keyframes sheen{0%{background-position:120% 0}60%{background-position:-20% 0}100%{background-position:-20% 0}}
+  @keyframes sheen{0%{background-position:120% 0}60%{background-position:-20% 0}100%{background-position:-20% 0}}
+  @-webkit-keyframes floatUp{0%{-webkit-transform:translateY(0) scale(.6);opacity:0}15%{opacity:.7}85%{opacity:.5}100%{-webkit-transform:translateY(-70vh) scale(1.1);opacity:0}}
+  @keyframes floatUp{0%{transform:translateY(0) scale(.6);opacity:0}15%{opacity:.7}85%{opacity:.5}100%{transform:translateY(-70vh) scale(1.1);opacity:0}}
+  @media (prefers-reduced-motion: reduce){
+    #welcome *{-webkit-animation:none!important;animation:none!important}
+    #welcome{-webkit-transition:opacity .3s;transition:opacity .3s}
+  }
+
+  /* ── Panorámica, al estilo de la portada de Netflix en el TV: el fondo de la
+        película a todo color (sin velo gris), un degradado solo por abajo y por la
+        izquierda para que el texto se lea, el teléfono en vivo a la izquierda y el
+        título, los datos y la sinopsis abajo, sobre la imagen. ── */
+  body.wide #scrim{background:
+    linear-gradient(0deg,rgba(0,0,0,.94) 0%,rgba(0,0,0,.62) 26%,rgba(0,0,0,0) 58%),
+    linear-gradient(90deg,rgba(0,0,0,.78) 0%,rgba(0,0,0,.3) 34%,rgba(0,0,0,0) 62%)}
+  body.wide .frame{left:16vw;height:78vh;border-radius:2vh;box-shadow:0 30px 90px rgba(0,0,0,.8)}
+  body.wide #wrap{display:block;padding:0}
+  body.wide #poster{display:none!important}
+  body.wide #info{position:absolute;left:32vw;right:5vw;bottom:8vh;max-width:none}
+  body.wide #title{font-size:4.6vw;line-height:1.02;margin-bottom:1.4vh;text-shadow:0 2px 22px rgba(0,0,0,.75)}
+  body.wide #meta{font-size:1.5vw;color:#eceef5;font-weight:600;margin-bottom:1.6vh;text-shadow:0 1px 12px rgba(0,0,0,.7)}
+  body.wide #meta span{margin-right:0}
+  body.wide #meta span+span::before{content:'•';margin:0 .8vw;color:#b8bccb}
+  body.wide #tag{font-size:1.45vw;color:#dfe3ef;margin-bottom:1.2vh;text-shadow:0 1px 10px rgba(0,0,0,.7)}
+  body.wide #ov{font-size:1.4vw;line-height:1.45;max-width:54vw;color:#eceef5;text-shadow:0 1px 12px rgba(0,0,0,.7);
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:1.6vh}
+  /* Fondo: nítido y sin recortes raros; el degradado de abajo deja la imagen limpia arriba */
+  body.wide #bg{background-position:center top}
+  /* Premio y reparto (solo en panorámica) */
+  #aw{display:none}
+  body.wide #aw{display:-webkit-inline-box;display:inline-flex;-webkit-box-align:center;align-items:center;
+    font-size:1.25vw;font-weight:700;color:#1a1400;background:#ffcc33;border-radius:1vw;padding:.45vh 1vw;margin-bottom:1.4vh;
+    box-shadow:0 2px 14px rgba(0,0,0,.45)}
+  #castwrap{display:none}
+  body.wide #castwrap{display:block}
+  body.wide #castlbl{font-size:1.1vw;letter-spacing:.12em;text-transform:uppercase;color:#b8bccb;margin-bottom:1vh;font-weight:700}
+  /* Director y productoras: bajo la línea de datos */
+  #dir{display:none}
+  body.wide #dir{display:block;font-size:1.35vw;color:#dfe3ef;margin-bottom:1.4vh;text-shadow:0 1px 10px rgba(0,0,0,.7)}
+  body.wide #dir b{color:#fff;font-weight:700}
+  #cos{display:none}
+  body.wide #cos{display:-webkit-box;display:flex;-webkit-box-align:center;align-items:center;gap:1vw;margin-bottom:1.6vh}
+  body.wide .co{display:-webkit-inline-box;display:inline-flex;-webkit-box-align:center;align-items:center;height:3.2vw;padding:0 1vw;
+    background:rgba(255,255,255,.92);border-radius:.6vw;box-shadow:0 4px 16px rgba(0,0,0,.4)}
+  body.wide .co img{height:2vw;max-width:9vw;display:block}
+  body.wide .co span{font-size:1.1vw;font-weight:800;color:#111;letter-spacing:.02em;white-space:nowrap}
+  body.wide #cast{display:-webkit-box;display:flex;gap:1.6vw;overflow:hidden}
+  body.wide .actor{width:6.2vw;text-align:center;-webkit-box-flex:0;flex:0 0 auto}
+  body.wide .actor .ph{width:5.4vw;height:5.4vw;border-radius:50%;background:#2a2a33 center/cover no-repeat;margin:0 auto .6vh;
+    border:2px solid rgba(255,255,255,.35);box-shadow:0 4px 16px rgba(0,0,0,.5)}
+  body.wide .actor .nm{font-size:1.05vw;line-height:1.2;color:#f2f3f8;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  body.wide .actor .ch{font-size:.95vw;color:#b8bccb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+</style>
+</head><body>
+<div id="welcome">
+  <video id="wvid" muted playsinline webkit-playsinline preload="auto"></video>
+  <div class="halo h1"></div><div class="halo h2"></div><div class="halo h3"></div><div class="grain"></div>
+  <div id="wring2"></div><div id="wring"></div>
+  <div id="wdots"></div>
+  <div id="wcol">
+    <div id="wlogo"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="13" rx="2.5"/><path d="M8 21h8M12 17v4"/></svg></div>
+    <div id="weye">Universal Remote</div>
+    <div id="whello" class="gone"></div>
+    <h1 id="wtitle">Welcome to the TV mirror</h1>
+    <p id="wsub">Whatever you see on your phone will appear here, big and instantly.</p>
+    <div id="wbar"><i></i></div>
+    <div id="wconn">Connecting to your phone…</div>
+    <div id="wfull">Press OK on the TV remote for full screen</div>
+  </div>
+  <div id="wfoot">Google Cast</div>
+</div>
+<div id="bg"></div><div id="ytwrap"><iframe id="ytf" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div id="scrim"></div>
+<img id="f0" class="frame" alt=""><img id="f1" class="frame" alt="">
+<div id="wrap">
+  <div id="idle">
+    <h1>Mirror ready</h1>
+    <p>Whatever you do on your phone will show up here.</p>
+  </div>
+  <img id="poster" alt="">
+  <div id="info" class="hide">
+    <h1 id="title"></h1>
+    <div id="meta"></div>
+    <div id="dir"></div>
+    <div id="cos"></div>
+    <div id="aw"></div>
+    <div id="tag"></div>
+    <div id="ov"></div>
+    <div id="castwrap"><div id="castlbl"></div><div id="cast"></div></div>
+  </div>
+</div>
+<div id="foot">Universal Remote · Google Cast</div>
+<script>
+(function () {
+  var last = -1, lastF = -1, fails = 0, cur = 0, live = false, wide = false;
+  var L = { series: "Series", cast: "Cast", oscar: "Academy Award winner for Best Picture", director: "Directed by" }; // rótulos: los manda el teléfono en su idioma (p.l)
+  var PV = "2026-09-11.1"; // si el teléfono trae otra versión, esta página está vieja: recargar
+  var CAST = true; // receptor de Google Cast: sin video de apertura (no hay servidor del teléfono), sin recarga por versión
+
+  // Bienvenida: 5 s en pantalla cada vez que el teléfono empieza a mostrar (petición del
+  // dueño). Se va cuando ya llegó lo primero del teléfono y han pasado los 5 s; como muy
+  // tarde a los 12 s (si el teléfono no responde, queda el texto de espera).
+  var WELCOME_MS = 10000;
+  // Partículas: 18 puntos con posición, tamaño y ritmo distintos (sin librerías)
+  (function () {
+    var box = document.getElementById('wdots');
+    for (var i = 0; i < 18; i++) {
+      var d = document.createElement('i'); d.className = 'dot';
+      var sz = (0.25 + (i % 5) * 0.12).toFixed(2);
+      d.style.left = ((i * 37) % 100) + 'vw'; d.style.top = (55 + (i * 23) % 45) + 'vh';
+      d.style.width = sz + 'vw'; d.style.height = sz + 'vw';
+      d.style.animationDuration = (7 + (i % 6) * 1.7) + 's'; d.style.webkitAnimationDuration = d.style.animationDuration;
+      d.style.animationDelay = ((i * 0.9) % 6) + 's'; d.style.webkitAnimationDelay = d.style.animationDelay;
+      box.appendChild(d);
+    }
+  })();
+  var welcomeAt = new Date().getTime(), welcomeGone = false, welcomeTimer = null, session = null;
+
+  // Video de apertura: se intenta primero; cuando acaba (o falla / no arranca en 3 s)
+  // se retira y la bienvenida animada empieza desde cero. welcomeAt se pone al
+  // terminar el video para que la bienvenida dure sus 10 s completos después.
+  var vid = document.getElementById('wvid'), vidTimer = null, vidStarted = false;
+  function setWelcoming(on) {
+    var b = document.body, c = b.className.replace(/s*welcoming/g, '');
+    b.className = on ? (c ? c + ' welcoming' : 'welcoming') : c;
+  }
+  function videoDone() {
+    if (vidTimer) { clearTimeout(vidTimer); vidTimer = null; }
+    var w = document.getElementById('welcome');
+    if (w.className.indexOf('playing') < 0) return;
+    try { vid.pause(); vid.removeAttribute('src'); vid.load(); } catch (e) {} // libera el plano de video del TV
+    welcomeAt = new Date().getTime();
+    w.className = 'hide';
+    setTimeout(function () { if (!welcomeGone) w.className = ''; }, 30); // reinicia las animaciones de entrada
+    if (welcomeTimer) clearTimeout(welcomeTimer);
+    welcomeTimer = setTimeout(dismissWelcome, 15000);
+  }
+  function playVideo() {
+    if (CAST || !vid || !vid.play) return false;
+    var w = document.getElementById('welcome');
+    w.className = 'playing';
+    setWelcoming(true);
+    vidStarted = false;
+    try {
+      vid.src = '/welcome.mp4?v=' + encodeURIComponent(PV);
+      vid.currentTime = 0;
+      var pr = vid.play();
+      if (pr && pr['catch']) pr['catch'](function () { videoDone(); });
+    } catch (e) { videoDone(); return false; }
+    if (vidTimer) clearTimeout(vidTimer);
+    vidTimer = setTimeout(function () { if (!vidStarted) videoDone(); }, 3000);
+    return true;
+  }
+  if (vid) {
+    vid.addEventListener('playing', function () { vidStarted = true; if (vidTimer) { clearTimeout(vidTimer); vidTimer = null; } vidTimer = setTimeout(videoDone, 14000); });
+    vid.addEventListener('ended', videoDone);
+    vid.addEventListener('error', videoDone);
+    vid.addEventListener('stalled', function () { if (!vidStarted) videoDone(); });
+  }
+  function dismissWelcome() {
+    if (welcomeGone) return;
+    welcomeGone = true;
+    if (vidTimer) { clearTimeout(vidTimer); vidTimer = null; }
+    var w = document.getElementById('welcome');
+    var left = Math.max(0, WELCOME_MS - (new Date().getTime() - welcomeAt));
+    setTimeout(function () {
+      if (!welcomeGone) return;           // volvió a empezar una sesión mientras tanto
+      w.className = 'out';
+      setWelcoming(false);
+      setTimeout(function () { if (welcomeGone) w.className = 'hide'; }, 750);
+    }, left);
+  }
+  function showWelcomeAgain() {
+    var w = document.getElementById('welcome');
+    welcomeGone = false;
+    welcomeAt = new Date().getTime();
+    setWelcoming(true);
+    if (welcomeTimer) clearTimeout(welcomeTimer);
+    if (playVideo()) return;   // el video vuelve a empezar; la bienvenida entra al acabar
+    w.className = 'hide';
+    // salir y volver a entrar reinicia las animaciones de entrada
+    setTimeout(function () { w.className = ''; }, 30);
+    welcomeTimer = setTimeout(dismissWelcome, 15000);
+  }
+  setWelcoming(true);
+  if (!playVideo()) welcomeTimer = setTimeout(dismissWelcome, 15000);
+
+  // Modo presentación: la barra del navegador solo se puede ocultar con pantalla completa,
+  // y los navegadores solo la conceden tras un gesto (clic o tecla). La app manda un
+  // clic / OK al TV en cuanto la página carga; si el navegador lo acepta, la barra se va.
+  var fullAsked = false;
+  function goFull() {
+    if (fullAsked) return;
+    fullAsked = true;
+    var d = document.documentElement;
+    var f = d.requestFullscreen || d.webkitRequestFullscreen || d.mozRequestFullScreen || d.msRequestFullscreen;
+    if (f) { try { f.call(d); } catch (e) {} }
+    var h = document.getElementById('wfull'); if (h) h.className = 'gone';
+  }
+  document.addEventListener('click', goFull, true);
+  document.addEventListener('keydown', function (e) { var k = e.keyCode; if (k === 13 || k === 32 || k === 65376 || k === 29443) goFull(); }, true);
+  var frames = [document.getElementById('f0'), document.getElementById('f1')];
+  function el(id) { return document.getElementById(id); }
+
+  // Disposición: la elige el teléfono en cada respuesta, sin reabrir nada en el TV.
+  function applyLayout(next) {
+    if (next === wide) return;
+    wide = next;
+    document.body.className = (wide ? 'wide' : '') + (document.body.className.indexOf('welcoming') >= 0 ? ' welcoming' : '') + (document.body.className.indexOf('yt') >= 0 ? ' yt' : '');
+    if (wide) { el('idle').className = 'hide'; el('wrap').className = ''; }
+    else if (live) {
+      // De panorámica a «Teléfono» con vídeo en marcha: la ficha se esconde y el fondo se
+      // apaga; si no, el teléfono quedaba encima del texto (visto por el dueño).
+      el('wrap').className = 'hide';
+      el('bg').style.opacity = '0';
+    }
+  }
+
+  // Fotograma de la pantalla del teléfono: se carga en la imagen oculta y, cuando
+  // está lista, se intercambian (así no parpadea en navegadores viejos).
+  function showFrame(b64, ts) {
+    if (ts === lastF) return;
+    lastF = ts;
+    var next = frames[1 - cur], prev = frames[cur];
+    next.onload = function () {
+      next.style.display = 'block';
+      prev.style.display = 'none';
+      cur = 1 - cur;
+    };
+    next.src = 'data:image/jpeg;base64,' + b64;
+    if (!live) {
+      live = true;
+      el('idle').className = 'hide';
+      if (!wide) { el('wrap').className = 'hide'; el('bg').style.opacity = '0'; }
+    }
+  }
+
+  // Ficha de la película: en panorámica acompaña siempre al teléfono en vivo;
+  // en modo teléfono solo se ve mientras no llegan fotogramas.
+  function renderInfo(p) {
+    if (!p.t) return;
+    if (p.ts && p.ts === last) return;
+    last = p.ts || 0;
+    el('idle').className = 'hide';
+    el('info').className = '';
+
+    el('title').innerHTML = '';
+    el('title').appendChild(document.createTextNode(p.t));
+
+    var meta = [];
+    if (p.y) meta.push('<span>' + p.y + '</span>');
+    if (p.r) meta.push('<span id="star">&#9733; ' + p.r + '</span>');
+    if (p.l) { if (p.l.series) L.series = p.l.series; if (p.l.cast) L.cast = p.l.cast; if (p.l.oscar) L.oscar = p.l.oscar; if (p.l.director) L.director = p.l.director; }
+    if (p.ty === 'tv') meta.push('<span>' + L.series + '</span>');
+    if (p.rt) meta.push('<span>' + p.rt + '</span>');
+    if (p.g && p.g.length) meta.push('<span>' + p.g.join(' &middot; ') + '</span>');
+    el('meta').innerHTML = meta.join('');
+
+    // Director y productoras
+    var dir = el('dir'); dir.innerHTML = '';
+    if (p.dir) { dir.appendChild(document.createTextNode(L.director + ': ')); var b = document.createElement('b'); b.appendChild(document.createTextNode(p.dir)); dir.appendChild(b); dir.style.display = wide ? 'block' : 'none'; }
+    else { dir.style.display = 'none'; }
+    var cos = el('cos'); cos.innerHTML = '';
+    if (wide && p.co && p.co.length) {
+      for (var j = 0; j < p.co.length; j++) {
+        var c = p.co[j]; var chip = document.createElement('div'); chip.className = 'co';
+        if (c.lg) { var im = document.createElement('img'); im.alt = c.n || ''; im.src = c.lg; chip.appendChild(im); }
+        else { var sp = document.createElement('span'); sp.appendChild(document.createTextNode(c.n || '')); chip.appendChild(sp); }
+        cos.appendChild(chip);
+      }
+      cos.style.display = 'flex';
+    } else { cos.style.display = 'none'; }
+
+    var aw = el('aw'); aw.innerHTML = '';
+    if (p.aw && L.oscar) { aw.appendChild(document.createTextNode('★ ' + L.oscar)); aw.style.display = wide ? 'inline-flex' : 'none'; }
+    else { aw.style.display = 'none'; }
+
+    var tag = el('tag'); tag.innerHTML = '';
+    if (p.tag) tag.appendChild(document.createTextNode(p.tag));
+
+    // Reparto con fotos (solo panorámica)
+    var cast = el('cast'); cast.innerHTML = '';
+    var castwrap = el('castwrap');
+    if (wide && p.cast && p.cast.length) {
+      el('castlbl').innerHTML = '';
+      el('castlbl').appendChild(document.createTextNode(L.cast));
+      for (var i = 0; i < p.cast.length; i++) {
+        var a = p.cast[i];
+        var box = document.createElement('div'); box.className = 'actor';
+        var ph = document.createElement('div'); ph.className = 'ph';
+        if (a.ph) ph.style.backgroundImage = 'url("' + a.ph + '")';
+        var nm = document.createElement('div'); nm.className = 'nm'; nm.appendChild(document.createTextNode(a.n || ''));
+        var ch = document.createElement('div'); ch.className = 'ch'; ch.appendChild(document.createTextNode(a.c || ''));
+        box.appendChild(ph); box.appendChild(nm); box.appendChild(ch);
+        cast.appendChild(box);
+      }
+      castwrap.style.display = 'block';
+    } else { castwrap.style.display = 'none'; }
+
+    var ov = el('ov'); ov.innerHTML = '';
+    if (p.ov) ov.appendChild(document.createTextNode(p.ov));
+
+    var poster = el('poster');
+    if (p.p && !wide) { poster.src = p.p; poster.style.display = 'block'; }
+    else { poster.style.display = 'none'; }
+
+    var bg = el('bg');
+    var bgUrl = (wide && p.b2) ? p.b2 : p.b; // panorámica: la versión en alta resolución
+    if (bgUrl) { bg.style.backgroundImage = 'url("' + bgUrl + '")'; bg.style.opacity = wide ? '1' : '0.5'; }
+    else { bg.style.opacity = '0'; }
+  }
+
+  // Tráiler de Clips: mismo vídeo que el teléfono, reproducido por el TV (nítido, no fotogramas).
+  // Empieza en silencio (política de autoplay); tras el primer clic/OK del usuario se quita el silencio.
+  var ytId = '', ytUnmuted = false;
+  function applyYt(id) {
+    var wrap = document.getElementById('ytwrap'), f = document.getElementById('ytf');
+    if (!id) {
+      if (ytId) { ytId = ''; f.src = 'about:blank'; document.body.className = document.body.className.replace(/s*yt/g, ''); }
+      return;
+    }
+    if (id === ytId) return;
+    ytId = id;
+    var mute = fullAsked ? 0 : 1;
+    f.src = 'https://www.youtube.com/embed/' + id + '?autoplay=1&mute=' + mute + '&controls=0&rel=0&playsinline=1&iv_load_policy=3&modestbranding=1&loop=1&playlist=' + id;
+    if (document.body.className.indexOf('yt') < 0) document.body.className += ' yt';
+    el('wrap').className = ''; el('idle').className = 'hide';
+  }
+  function render(p) {
+    if (!p) return;
+    if (!CAST && p.pv && p.pv !== PV) { try { window.location.reload(); } catch (e) {} return; }
+    applyYt(p.yt || '');
+    if (p.ss) { if (session && p.ss !== session) showWelcomeAgain(); session = p.ss; }
+    if (p.l && p.l.hello) { var hl = document.getElementById('whello'); if (hl && hl.textContent !== p.l.hello) { hl.textContent = p.l.hello; hl.className = ''; } }
+    if ((p.f || p.t) && document.getElementById('welcome').className.indexOf('playing') < 0) dismissWelcome();
+    applyLayout(!!p.w);
+    if (p.f) showFrame(p.f, p.fts || 0);
+    if (wide || p.yt) { el('wrap').className = ''; renderInfo(p); }
+    else if (!live) renderInfo(p);   // hubo vídeo: no volver a la ficha por un hueco
+  }
+
+  function poll() {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', '/s?_=' + new Date().getTime(), true);
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState !== 4) return;
+      if (xhr.status === 200) {
+        fails = 0;
+        try { render(JSON.parse(xhr.responseText)); } catch (e) {}
+      } else { fails++; }
+      // Con vídeo en marcha se pide más a menudo; sin teléfono, se baja el ritmo
+      setTimeout(poll, fails > 5 ? 4000 : (live ? 350 : 1000));
+    };
+    try { xhr.send(); } catch (e) { fails++; setTimeout(poll, 4000); }
+  }
+
+  // Receptor de Google Cast: el teléfono manda el estado ({t:'s',p}) y los fotogramas en
+  // trozos ({t:'f',id,i,n,d}; Cast limita cada mensaje a 64 KB). Cuando el fotograma está
+  // completo se pinta y se contesta {t:'a',id} para que el teléfono mande el siguiente.
+  function startCast() {
+    var NS = "urn:x-cast:com.raulochoa.universalremote";
+    var ctx = cast.framework.CastReceiverContext.getInstance();
+    var fid = -1, parts = [], got = 0;
+    ctx.addCustomMessageListener(NS, function (ev) {
+      var m = ev.data; if (!m) return;
+      if (typeof m === 'string') { try { m = JSON.parse(m); } catch (e) { return; } }
+      if (m.t === 's') { render(m.p || {}); return; }
+      if (m.t !== 'f') return;
+      if (m.id < fid) return;
+      if (m.id !== fid) { fid = m.id; parts = new Array(m.n); got = 0; }
+      if (parts[m.i] === undefined) { parts[m.i] = m.d; got++; }
+      if (got < m.n) return;
+      var full = parts.join(''); parts = []; got = 0;
+      if (document.getElementById('welcome').className.indexOf('playing') < 0) dismissWelcome();
+      showFrame(full, m.id);
+      try { ctx.sendCustomMessage(NS, undefined, { t: 'a', id: m.id }); } catch (e) {}
+    });
+    var opts = new cast.framework.CastReceiverOptions();
+    opts.disableIdleTimeout = true;   // el espejo no reproduce «media»: sin esto el receptor se cierra solo
+    ctx.start(opts);
+  }
+  if (CAST) startCast(); else poll();
+})();
+</script>
+</body></html>
