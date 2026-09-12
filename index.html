@@ -253,6 +253,9 @@
   var L = { series: "Series", cast: "Cast", oscar: "Academy Award winner for Best Picture", director: "Directed by" }; // rótulos: los manda el teléfono en su idioma (p.l)
   var PV = "2026-09-12.1"; // si el teléfono trae otra versión, esta página está vieja: recargar
   var CAST = true; // receptor de Google Cast: sin video de apertura (no hay servidor del teléfono), sin recarga por versión
+  // Si el teléfono deja de contestar (cambió de dirección o de red), saltar a la página en la nube,
+  // que redirige a la dirección nueva: la pestaña vieja del Samsung deja de ser un callejón sin salida.
+  var CLOUD = "";
 
   // Bienvenida: 5 s en pantalla cada vez que el teléfono empieza a mostrar (petición del
   // dueño). Se va cuando ya llegó lo primero del teléfono y han pasado los 5 s; como muy
@@ -505,10 +508,11 @@
         fails = 0;
         try { render(JSON.parse(xhr.responseText)); } catch (e) {}
       } else { fails++; }
+      if (fails >= 8 && CLOUD) { try { window.location.href = CLOUD; } catch (e) {} return; }
       // Con vídeo en marcha se pide más a menudo; sin teléfono, se baja el ritmo
       setTimeout(poll, fails > 5 ? 4000 : (live ? 350 : 1000));
     };
-    try { xhr.send(); } catch (e) { fails++; setTimeout(poll, 4000); }
+    try { xhr.send(); } catch (e) { fails++; if (fails >= 8 && CLOUD) { try { window.location.href = CLOUD; } catch (e2) {} return; } setTimeout(poll, 4000); }
   }
 
   // Receptor de Google Cast: el teléfono manda el estado ({t:'s',p}) y los fotogramas en
