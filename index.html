@@ -260,7 +260,7 @@
 (function () {
   var last = -1, lastF = -1, fails = 0, cur = 0, live = false, wide = false;
   var L = { series: "Series", cast: "Cast", oscar: "Academy Award winner for Best Picture", director: "Directed by" }; // rótulos: los manda el teléfono en su idioma (p.l)
-  var PV = "2026-09-12.7"; // si el teléfono trae otra versión, esta página está vieja: recargar
+  var PV = "2026-09-12.8"; // si el teléfono trae otra versión, esta página está vieja: recargar
   var CAST = true; // receptor de Google Cast: sin video de apertura (no hay servidor del teléfono), sin recarga por versión
   // Si el teléfono deja de contestar (cambió de dirección o de red), saltar a la página en la nube,
   // que redirige a la dirección nueva: la pestaña vieja del Samsung deja de ser un callejón sin salida.
@@ -532,7 +532,7 @@
     if (p.ss) { if (session && p.ss !== session) showWelcomeAgain(); session = p.ss; }
     if (p.l && p.l.hello) { var hl = document.getElementById('whello'); if (hl && hl.textContent !== p.l.hello) { hl.textContent = p.l.hello; hl.className = ''; } }
     if ((p.f || p.t) && document.getElementById('welcome').className.indexOf('playing') < 0) dismissWelcome();
-    applyLayout(!!p.w);
+    applyLayout(!!p.w && !!p.t);   // panorámica solo con ficha; sin ella (pantallas sociales), teléfono a pantalla completa
     if (p.f) showFrame(p.f, p.fts || 0);
     if (wide || p.yt) { el('wrap').className = ''; renderInfo(p); }
     else if (!live) renderInfo(p);   // hubo vídeo: no volver a la ficha por un hueco
