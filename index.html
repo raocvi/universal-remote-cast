@@ -150,7 +150,7 @@
   body.wide .frame{left:16vw;height:78vh;border-radius:2vh;box-shadow:0 30px 90px rgba(0,0,0,.8);z-index:auto}
   body.wide #wrap{display:block;padding:0}
   body.wide #poster{display:none!important}
-  body.wide #info{position:absolute;left:32vw;right:5vw;bottom:8vh;max-width:none}
+  body.wide #info{position:absolute;left:32vw;right:19vw;bottom:8vh;max-width:none}
   body.wide #title{font-size:4.6vw;line-height:1.02;margin-bottom:1.4vh;text-shadow:0 2px 22px rgba(0,0,0,.75)}
   body.wide #meta{font-size:1.5vw;color:#eceef5;font-weight:600;margin-bottom:1.6vh;text-shadow:0 1px 12px rgba(0,0,0,.7)}
   body.wide #meta span{margin-right:0}
@@ -166,8 +166,9 @@
     font-size:1.25vw;font-weight:700;color:#1a1400;background:#ffcc33;border-radius:1vw;padding:.45vh 1vw;margin-bottom:1.4vh;
     box-shadow:0 2px 14px rgba(0,0,0,.45)}
   #castwrap{display:none}
-  body.wide #castwrap{display:block}
-  body.wide #castlbl{font-size:1.1vw;letter-spacing:.12em;text-transform:uppercase;color:#b8bccb;margin-bottom:1vh;font-weight:700}
+  /* Reparto en columna a la derecha (el teléfono ocupa la izquierda; en Clips va a la izquierda) */
+  body.wide #castwrap{display:block;position:fixed;right:4vw;top:9vh;bottom:30vh;width:12vw;overflow:hidden}
+  body.wide #castlbl{font-size:1.1vw;letter-spacing:.12em;text-transform:uppercase;color:#d7dae4;margin-bottom:1vh;font-weight:700;text-align:center;text-shadow:0 1px 10px rgba(0,0,0,.8)}
   /* Director y productoras: bajo la línea de datos */
   #dir{display:none}
   body.wide #dir{display:block;font-size:1.35vw;color:#dfe3ef;margin-bottom:1.4vh;text-shadow:0 1px 10px rgba(0,0,0,.7)}
@@ -178,9 +179,9 @@
     background:rgba(255,255,255,.92);border-radius:.6vw;box-shadow:0 4px 16px rgba(0,0,0,.4)}
   body.wide .co img{height:2vw;max-width:9vw;display:block}
   body.wide .co span{font-size:1.1vw;font-weight:800;color:#111;letter-spacing:.02em;white-space:nowrap}
-  body.wide #cast{display:-webkit-box;display:flex;gap:1.6vw;overflow:hidden}
-  body.wide .actor{width:6.2vw;text-align:center;-webkit-box-flex:0;flex:0 0 auto}
-  body.wide .actor .ph{width:5.4vw;height:5.4vw;border-radius:50%;background:#2a2a33 center/cover no-repeat;margin:0 auto .6vh;
+  body.wide #cast{display:-webkit-box;display:flex;-webkit-box-orient:vertical;flex-direction:column;gap:.8vh;overflow:hidden}
+  body.wide .actor{width:12vw;text-align:center;-webkit-box-flex:0;flex:0 0 auto}
+  body.wide .actor .ph{width:4.2vw;height:4.2vw;border-radius:50%;background:#2a2a33 center/cover no-repeat;margin:0 auto .5vh;
     border:2px solid rgba(255,255,255,.35);box-shadow:0 4px 16px rgba(0,0,0,.5)}
   body.wide .actor .nm{font-size:1.05vw;line-height:1.2;color:#f2f3f8;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   body.wide .actor .ch{font-size:.95vw;color:#b8bccb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -260,7 +261,7 @@
 (function () {
   var last = -1, lastF = -1, fails = 0, cur = 0, live = false, wide = false;
   var L = { series: "Series", cast: "Cast", oscar: "Academy Award winner for Best Picture", director: "Directed by" }; // rótulos: los manda el teléfono en su idioma (p.l)
-  var PV = "2026-09-12.8"; // si el teléfono trae otra versión, esta página está vieja: recargar
+  var PV = "2026-09-12.9"; // si el teléfono trae otra versión, esta página está vieja: recargar
   var CAST = true; // receptor de Google Cast: sin video de apertura (no hay servidor del teléfono), sin recarga por versión
   // Si el teléfono deja de contestar (cambió de dirección o de red), saltar a la página en la nube,
   // que redirige a la dirección nueva: la pestaña vieja del Samsung deja de ser un callejón sin salida.
