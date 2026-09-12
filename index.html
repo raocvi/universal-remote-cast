@@ -254,7 +254,7 @@
 (function () {
   var last = -1, lastF = -1, fails = 0, cur = 0, live = false, wide = false;
   var L = { series: "Series", cast: "Cast", oscar: "Academy Award winner for Best Picture", director: "Directed by" }; // rótulos: los manda el teléfono en su idioma (p.l)
-  var PV = "2026-09-12.4"; // si el teléfono trae otra versión, esta página está vieja: recargar
+  var PV = "2026-09-12.5"; // si el teléfono trae otra versión, esta página está vieja: recargar
   var CAST = true; // receptor de Google Cast: sin video de apertura (no hay servidor del teléfono), sin recarga por versión
   // Si el teléfono deja de contestar (cambió de dirección o de red), saltar a la página en la nube,
   // que redirige a la dirección nueva: la pestaña vieja del Samsung deja de ser un callejón sin salida.
@@ -392,14 +392,21 @@
       next.style.display = 'block';
       prev.style.display = 'none';
       cur = 1 - cur;
+      // La ficha solo se esconde cuando la imagen ya se pintó: si el fotograma llega
+      // roto, el TV no se queda en negro (visto por Cast en la build 120).
+      if (!live) {
+        live = true;
+        el('idle').className = 'hide';
+        if (!wide) { el('wrap').className = 'hide'; el('bg').style.opacity = '0'; }
+      }
     };
+    next.onerror = function () { report('img', { id: ts, len: b64 ? b64.length : 0, head: b64 ? b64.slice(0, 12) : '' }); };
     next.src = 'data:image/jpeg;base64,' + b64;
-    if (!live) {
-      live = true;
-      el('idle').className = 'hide';
-      if (!wide) { el('wrap').className = 'hide'; el('bg').style.opacity = '0'; }
-    }
   }
+  // Por Cast el receptor no tiene consola: los fallos viajan al teléfono y salen en su traza.
+  var reportFn = null;
+  function report(what, extra) { try { if (reportFn) reportFn({ t: 'e', e: what, x: extra || null }); } catch (e) {} }
+  window.onerror = function (msg, src, line) { report('js', { m: String(msg), l: line }); };
 
   // Ficha de la película: en panorámica acompaña siempre al teléfono en vivo;
   // en modo teléfono solo se ve mientras no llegan fotogramas.
@@ -489,7 +496,8 @@
     }
     if (id === ytId) return;
     ytId = id;
-    var mute = fullAsked ? 0 : 1;
+    // Por Cast el receptor puede sonar sin gesto del usuario; en el navegador solo tras el clic
+    var mute = (CAST || fullAsked) ? 0 : 1;
     wrap.innerHTML = '';
     var f = document.createElement('iframe');
     f.id = 'ytf'; f.setAttribute('allow', 'autoplay; encrypted-media'); f.setAttribute('allowfullscreen', '');
@@ -545,7 +553,8 @@
   function startCast() {
     var NS = "urn:x-cast:com.raulochoa.universalremote";
     var ctx = cast.framework.CastReceiverContext.getInstance();
-    var fid = -1, parts = [], got = 0;
+    var fid = -1, parts = [], got = 0, nframes = 0;
+    reportFn = function (m) { ctx.sendCustomMessage(NS, undefined, m); };
     ctx.addCustomMessageListener(NS, function (ev) {
       var m = ev.data; if (!m) return;
       if (typeof m === 'string') { try { m = JSON.parse(m); } catch (e) { return; } }
@@ -556,6 +565,8 @@
       if (parts[m.i] === undefined) { parts[m.i] = m.d; got++; }
       if (got < m.n) return;
       var full = parts.join(''); parts = []; got = 0;
+      nframes++;
+      if (nframes === 1) report('frame1', { n: m.n, len: full.length, head: full.slice(0, 12) });
       if (document.getElementById('welcome').className.indexOf('playing') < 0) dismissWelcome();
       showFrame(full, m.id);
       try { ctx.sendCustomMessage(NS, undefined, { t: 'a', id: m.id }); } catch (e) {}
