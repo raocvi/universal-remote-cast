@@ -179,12 +179,13 @@
     background:rgba(255,255,255,.92);border-radius:.6vw;box-shadow:0 4px 16px rgba(0,0,0,.4)}
   body.wide .co img{height:2vw;max-width:9vw;display:block}
   body.wide .co span{font-size:1.1vw;font-weight:800;color:#111;letter-spacing:.02em;white-space:nowrap}
-  body.wide #cast{display:-webkit-box;display:flex;-webkit-box-orient:vertical;flex-direction:column;gap:.8vh;overflow:hidden}
-  body.wide .actor{width:12vw;text-align:center;-webkit-box-flex:0;flex:0 0 auto}
-  body.wide .actor .ph{width:4.2vw;height:4.2vw;border-radius:50%;background:#2a2a33 center/cover no-repeat;margin:0 auto .5vh;
+  /* Ocho actores en dos columnas de cuatro: caben enteros sin cortarse (dueño, build 125) */
+  body.wide #cast{display:-webkit-box;display:flex;-webkit-flex-wrap:wrap;flex-wrap:wrap;-webkit-box-pack:center;justify-content:center;gap:1vh .4vw;overflow:hidden}
+  body.wide .actor{width:5.6vw;text-align:center;-webkit-box-flex:0;flex:0 0 auto}
+  body.wide .actor .ph{width:3.6vw;height:3.6vw;border-radius:50%;background:#2a2a33 center/cover no-repeat;margin:0 auto .4vh;
     border:2px solid rgba(255,255,255,.35);box-shadow:0 4px 16px rgba(0,0,0,.5)}
-  body.wide .actor .nm{font-size:1.05vw;line-height:1.2;color:#f2f3f8;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  body.wide .actor .ch{font-size:.95vw;color:#b8bccb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  body.wide .actor .nm{font-size:.9vw;text-shadow:0 1px 8px rgba(0,0,0,.8);line-height:1.2;color:#f2f3f8;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  body.wide .actor .ch{display:none}
   /* ── Clips (tráiler de fondo): título en la cabecera, reparto en columna a la izquierda,
         datos y sinopsis abajo; nada se solapa con nada (petición del dueño, foto build 116).
         Título y reparto van fijos a la ventana; el bloque de datos vive abajo a la derecha. */
@@ -261,7 +262,7 @@
 (function () {
   var last = -1, lastF = -1, fails = 0, cur = 0, live = false, wide = false;
   var L = { series: "Series", cast: "Cast", oscar: "Academy Award winner for Best Picture", director: "Directed by" }; // rótulos: los manda el teléfono en su idioma (p.l)
-  var PV = "2026-09-12.9"; // si el teléfono trae otra versión, esta página está vieja: recargar
+  var PV = "2026-09-12.10"; // si el teléfono trae otra versión, esta página está vieja: recargar
   var CAST = true; // receptor de Google Cast: sin video de apertura (no hay servidor del teléfono), sin recarga por versión
   // Si el teléfono deja de contestar (cambió de dirección o de red), saltar a la página en la nube,
   // que redirige a la dirección nueva: la pestaña vieja del Samsung deja de ser un callejón sin salida.
