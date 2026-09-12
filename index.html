@@ -254,7 +254,7 @@
 (function () {
   var last = -1, lastF = -1, fails = 0, cur = 0, live = false, wide = false;
   var L = { series: "Series", cast: "Cast", oscar: "Academy Award winner for Best Picture", director: "Directed by" }; // rótulos: los manda el teléfono en su idioma (p.l)
-  var PV = "2026-09-12.3"; // si el teléfono trae otra versión, esta página está vieja: recargar
+  var PV = "2026-09-12.4"; // si el teléfono trae otra versión, esta página está vieja: recargar
   var CAST = true; // receptor de Google Cast: sin video de apertura (no hay servidor del teléfono), sin recarga por versión
   // Si el teléfono deja de contestar (cambió de dirección o de red), saltar a la página en la nube,
   // que redirige a la dirección nueva: la pestaña vieja del Samsung deja de ser un callejón sin salida.
@@ -479,21 +479,39 @@
   // Tráiler de Clips: mismo vídeo que el teléfono, reproducido por el TV (nítido, no fotogramas).
   // Empieza en silencio (política de autoplay); tras el primer clic/OK del usuario se quita el silencio.
   var ytId = '', ytUnmuted = false;
+  // Cada tráiler estrena un reproductor: reutilizar el iframe tras vaciarlo (about:blank) dejaba
+  // el video en negro al volver a Clips en el navegador del Samsung (dueño, build 119).
   function applyYt(id) {
-    var wrap = document.getElementById('ytwrap'), f = document.getElementById('ytf');
+    var wrap = document.getElementById('ytwrap');
     if (!id) {
-      if (ytId) { ytId = ''; f.src = 'about:blank'; removeClass('yt'); }
+      if (ytId) { ytId = ''; wrap.innerHTML = ''; removeClass('yt'); }
       return;
     }
     if (id === ytId) return;
     ytId = id;
     var mute = fullAsked ? 0 : 1;
+    wrap.innerHTML = '';
+    var f = document.createElement('iframe');
+    f.id = 'ytf'; f.setAttribute('allow', 'autoplay; encrypted-media'); f.setAttribute('allowfullscreen', '');
     f.src = 'https://www.youtube.com/embed/' + id + '?autoplay=1&mute=' + mute + '&controls=0&rel=0&playsinline=1&iv_load_policy=3&modestbranding=1&loop=1&playlist=' + id;
+    wrap.appendChild(f);
     if (document.body.className.indexOf('yt') < 0) document.body.className += ' yt';
     el('wrap').className = ''; el('idle').className = 'hide';
   }
+  // Estado visible junto al pie (para diagnosticar con una foto): modo, fotogramas y edad del último dato.
+  var lastDataAt = 0, statusTimer = null;
+  function paintStatus() {
+    var f = document.getElementById('foot'); if (!f) return;
+    var age = lastDataAt ? Math.round((new Date().getTime() - lastDataAt) / 1000) : -1;
+    var mode = ytId ? 'clips' : (wide ? 'panoramica' : 'telefono');
+    var st = document.getElementById('st');
+    if (!st) { st = document.createElement('span'); st.id = 'st'; st.style.opacity = '.55'; f.appendChild(st); }
+    st.textContent = ' · ' + mode + (live ? ' · video' : ' · sin video') + (age >= 0 ? ' · ' + age + 's' : '') + ' · v' + PV.slice(-4);
+  }
+  statusTimer = setInterval(paintStatus, 1000);
   function render(p) {
     if (!p) return;
+    lastDataAt = new Date().getTime();
     if (!CAST && p.pv && p.pv !== PV) { try { window.location.reload(); } catch (e) {} return; }
     applyYt(p.yt || '');
     if (p.ss) { if (session && p.ss !== session) showWelcomeAgain(); session = p.ss; }
