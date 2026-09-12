@@ -183,11 +183,13 @@
   /* ── Clips (tráiler de fondo): título en la cabecera, reparto en columna a la izquierda,
         datos y sinopsis abajo; nada se solapa con nada (petición del dueño, foto build 116).
         Título y reparto van fijos a la ventana; el bloque de datos vive abajo a la derecha. */
-  body.yt #scrim{background:-webkit-linear-gradient(top,rgba(4,4,8,.78) 0%,rgba(4,4,8,0) 24%,rgba(4,4,8,0) 56%,rgba(4,4,8,.92) 100%);
-    background:linear-gradient(180deg,rgba(4,4,8,.78) 0%,rgba(4,4,8,0) 24%,rgba(4,4,8,0) 56%,rgba(4,4,8,.92) 100%)}
+  /* Arriba casi sin oscurecer: la franja oscura detrás del título se veía como un marco negro
+     con tráilers claros (dueño, build 122). El título se lee por su sombra. */
+  body.yt #scrim{background:-webkit-linear-gradient(top,rgba(4,4,8,.28) 0%,rgba(4,4,8,0) 14%,rgba(4,4,8,0) 56%,rgba(4,4,8,.92) 100%);
+    background:linear-gradient(180deg,rgba(4,4,8,.28) 0%,rgba(4,4,8,0) 14%,rgba(4,4,8,0) 56%,rgba(4,4,8,.92) 100%)}
   body.yt #info{position:absolute;left:17vw;right:5vw;bottom:5vh;top:auto;max-width:none}
   body.yt #title{position:fixed;top:3vh;left:5vw;right:5vw;margin:0;padding-bottom:.6vh;font-size:4.2vw;line-height:1.16;
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 2px 22px rgba(0,0,0,.8)}
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 2px 6px rgba(0,0,0,.95),0 2px 26px rgba(0,0,0,.85)}
   body.yt #meta{font-size:1.5vw;color:#eceef5;font-weight:600;margin-bottom:1.2vh;text-shadow:0 1px 12px rgba(0,0,0,.7)}
   body.yt #meta span{margin-right:0}
   body.yt #meta span+span::before{content:'•';margin:0 .8vw;color:#b8bccb}
@@ -254,7 +256,7 @@
 (function () {
   var last = -1, lastF = -1, fails = 0, cur = 0, live = false, wide = false;
   var L = { series: "Series", cast: "Cast", oscar: "Academy Award winner for Best Picture", director: "Directed by" }; // rótulos: los manda el teléfono en su idioma (p.l)
-  var PV = "2026-09-12.5"; // si el teléfono trae otra versión, esta página está vieja: recargar
+  var PV = "2026-09-12.6"; // si el teléfono trae otra versión, esta página está vieja: recargar
   var CAST = true; // receptor de Google Cast: sin video de apertura (no hay servidor del teléfono), sin recarga por versión
   // Si el teléfono deja de contestar (cambió de dirección o de red), saltar a la página en la nube,
   // que redirige a la dirección nueva: la pestaña vieja del Samsung deja de ser un callejón sin salida.
