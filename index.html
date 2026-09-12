@@ -13,6 +13,9 @@
   #ytwrap{position:absolute;top:0;left:0;right:0;bottom:0;display:none;background:#000;overflow:hidden}
   #ytwrap iframe{position:absolute;top:50%;left:50%;width:100vw;height:56.25vw;min-height:100vh;min-width:177.78vh;-webkit-transform:translate(-50%,-50%);transform:translate(-50%,-50%);border:0}
   body.yt #ytwrap{display:block}
+  /* El tráiler llena el TV de verdad: los tráilers de cine (2.39:1) traen franjas negras dentro del
+     reproductor; se amplía un 34 % para que queden fuera de pantalla y el título vaya sobre el video. */
+  body.yt #ytwrap iframe{-webkit-transform:translate(-50%,-50%) scale(1.34);transform:translate(-50%,-50%) scale(1.34)}
   body.yt .frame,body.yt #bg{display:none!important}
   body.yt #scrim{background:-webkit-linear-gradient(top,rgba(4,4,8,0) 0%,rgba(4,4,8,0) 45%,rgba(4,4,8,.92) 100%);background:linear-gradient(180deg,rgba(4,4,8,0) 0%,rgba(4,4,8,0) 45%,rgba(4,4,8,.92) 100%)}
   body.yt #wrap{display:block;padding:0}
@@ -183,7 +186,7 @@
   body.yt #scrim{background:-webkit-linear-gradient(top,rgba(4,4,8,.78) 0%,rgba(4,4,8,0) 24%,rgba(4,4,8,0) 56%,rgba(4,4,8,.92) 100%);
     background:linear-gradient(180deg,rgba(4,4,8,.78) 0%,rgba(4,4,8,0) 24%,rgba(4,4,8,0) 56%,rgba(4,4,8,.92) 100%)}
   body.yt #info{position:absolute;left:17vw;right:5vw;bottom:5vh;top:auto;max-width:none}
-  body.yt #title{position:fixed;top:3.5vh;left:5vw;right:5vw;margin:0;font-size:4.2vw;line-height:1.02;
+  body.yt #title{position:fixed;top:3vh;left:5vw;right:5vw;margin:0;padding-bottom:.6vh;font-size:4.2vw;line-height:1.16;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 2px 22px rgba(0,0,0,.8)}
   body.yt #meta{font-size:1.5vw;color:#eceef5;font-weight:600;margin-bottom:1.2vh;text-shadow:0 1px 12px rgba(0,0,0,.7)}
   body.yt #meta span{margin-right:0}
@@ -251,7 +254,7 @@
 (function () {
   var last = -1, lastF = -1, fails = 0, cur = 0, live = false, wide = false;
   var L = { series: "Series", cast: "Cast", oscar: "Academy Award winner for Best Picture", director: "Directed by" }; // rótulos: los manda el teléfono en su idioma (p.l)
-  var PV = "2026-09-12.2"; // si el teléfono trae otra versión, esta página está vieja: recargar
+  var PV = "2026-09-12.3"; // si el teléfono trae otra versión, esta página está vieja: recargar
   var CAST = true; // receptor de Google Cast: sin video de apertura (no hay servidor del teléfono), sin recarga por versión
   // Si el teléfono deja de contestar (cambió de dirección o de red), saltar a la página en la nube,
   // que redirige a la dirección nueva: la pestaña vieja del Samsung deja de ser un callejón sin salida.
