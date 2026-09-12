@@ -177,6 +177,37 @@
     border:2px solid rgba(255,255,255,.35);box-shadow:0 4px 16px rgba(0,0,0,.5)}
   body.wide .actor .nm{font-size:1.05vw;line-height:1.2;color:#f2f3f8;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   body.wide .actor .ch{font-size:.95vw;color:#b8bccb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* ── Clips (tráiler de fondo): título en la cabecera, reparto en columna a la izquierda,
+        datos y sinopsis abajo; nada se solapa con nada (petición del dueño, foto build 116).
+        Título y reparto van fijos a la ventana; el bloque de datos vive abajo a la derecha. */
+  body.yt #scrim{background:-webkit-linear-gradient(top,rgba(4,4,8,.78) 0%,rgba(4,4,8,0) 24%,rgba(4,4,8,0) 56%,rgba(4,4,8,.92) 100%);
+    background:linear-gradient(180deg,rgba(4,4,8,.78) 0%,rgba(4,4,8,0) 24%,rgba(4,4,8,0) 56%,rgba(4,4,8,.92) 100%)}
+  body.yt #info{position:absolute;left:17vw;right:5vw;bottom:5vh;top:auto;max-width:none}
+  body.yt #title{position:fixed;top:3.5vh;left:5vw;right:5vw;margin:0;font-size:4.2vw;line-height:1.02;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 2px 22px rgba(0,0,0,.8)}
+  body.yt #meta{font-size:1.5vw;color:#eceef5;font-weight:600;margin-bottom:1.2vh;text-shadow:0 1px 12px rgba(0,0,0,.7)}
+  body.yt #meta span{margin-right:0}
+  body.yt #meta span+span::before{content:'•';margin:0 .8vw;color:#b8bccb}
+  body.yt #dir{display:block;font-size:1.3vw;color:#dfe3ef;margin-bottom:1.2vh;text-shadow:0 1px 10px rgba(0,0,0,.7)}
+  body.yt #dir b{color:#fff;font-weight:700}
+  body.yt #cos{display:-webkit-box;display:flex;-webkit-box-align:center;align-items:center;gap:1vw;margin-bottom:1.2vh}
+  body.yt .co{display:-webkit-inline-box;display:inline-flex;-webkit-box-align:center;align-items:center;height:3vw;padding:0 1vw;
+    background:rgba(255,255,255,.92);border-radius:.6vw;box-shadow:0 4px 16px rgba(0,0,0,.4)}
+  body.yt .co img{height:1.9vw;max-width:9vw;display:block}
+  body.yt .co span{font-size:1.05vw;font-weight:800;color:#111;letter-spacing:.02em;white-space:nowrap}
+  body.yt #aw{display:-webkit-inline-box;display:inline-flex;-webkit-box-align:center;align-items:center;
+    font-size:1.2vw;font-weight:700;color:#1a1400;background:#ffcc33;border-radius:1vw;padding:.45vh 1vw;margin-bottom:1.2vh}
+  body.yt #tag{font-size:1.4vw;color:#dfe3ef;margin-bottom:1vh;text-shadow:0 1px 10px rgba(0,0,0,.7)}
+  body.yt #ov{font-size:1.35vw;line-height:1.45;max-width:none;color:#eceef5;text-shadow:0 1px 12px rgba(0,0,0,.7);
+    display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+  body.yt #castwrap{display:block;position:fixed;left:3vw;top:14vh;bottom:28vh;width:11vw;overflow:hidden}
+  body.yt #castlbl{font-size:1vw;letter-spacing:.12em;text-transform:uppercase;color:#d7dae4;margin-bottom:1vh;font-weight:700;text-shadow:0 1px 10px rgba(0,0,0,.8)}
+  body.yt #cast{display:-webkit-box;display:flex;-webkit-box-orient:vertical;flex-direction:column;gap:1.1vh;overflow:hidden}
+  body.yt .actor{width:11vw;text-align:center;-webkit-box-flex:0;flex:0 0 auto}
+  body.yt .actor .ph{width:3.7vw;height:3.7vw;border-radius:50%;background:#2a2a33 center/cover no-repeat;margin:0 auto .4vh;
+    border:2px solid rgba(255,255,255,.4);box-shadow:0 4px 16px rgba(0,0,0,.55)}
+  body.yt .actor .nm{font-size:.95vw;line-height:1.2;color:#f2f3f8;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 8px rgba(0,0,0,.8)}
+  body.yt .actor .ch{display:none}
 </style>
 </head><body>
 <div id="welcome">
@@ -220,7 +251,7 @@
 (function () {
   var last = -1, lastF = -1, fails = 0, cur = 0, live = false, wide = false;
   var L = { series: "Series", cast: "Cast", oscar: "Academy Award winner for Best Picture", director: "Directed by" }; // rótulos: los manda el teléfono en su idioma (p.l)
-  var PV = "2026-09-11.1"; // si el teléfono trae otra versión, esta página está vieja: recargar
+  var PV = "2026-09-12.1"; // si el teléfono trae otra versión, esta página está vieja: recargar
   var CAST = true; // receptor de Google Cast: sin video de apertura (no hay servidor del teléfono), sin recarga por versión
 
   // Bienvenida: 5 s en pantalla cada vez que el teléfono empieza a mostrar (petición del
@@ -384,10 +415,10 @@
 
     // Director y productoras
     var dir = el('dir'); dir.innerHTML = '';
-    if (p.dir) { dir.appendChild(document.createTextNode(L.director + ': ')); var b = document.createElement('b'); b.appendChild(document.createTextNode(p.dir)); dir.appendChild(b); dir.style.display = wide ? 'block' : 'none'; }
+    if (p.dir) { dir.appendChild(document.createTextNode(L.director + ': ')); var b = document.createElement('b'); b.appendChild(document.createTextNode(p.dir)); dir.appendChild(b); dir.style.display = (wide || ytId) ? 'block' : 'none'; }
     else { dir.style.display = 'none'; }
     var cos = el('cos'); cos.innerHTML = '';
-    if (wide && p.co && p.co.length) {
+    if ((wide || ytId) && p.co && p.co.length) {
       for (var j = 0; j < p.co.length; j++) {
         var c = p.co[j]; var chip = document.createElement('div'); chip.className = 'co';
         if (c.lg) { var im = document.createElement('img'); im.alt = c.n || ''; im.src = c.lg; chip.appendChild(im); }
@@ -398,7 +429,7 @@
     } else { cos.style.display = 'none'; }
 
     var aw = el('aw'); aw.innerHTML = '';
-    if (p.aw && L.oscar) { aw.appendChild(document.createTextNode('★ ' + L.oscar)); aw.style.display = wide ? 'inline-flex' : 'none'; }
+    if (p.aw && L.oscar) { aw.appendChild(document.createTextNode('★ ' + L.oscar)); aw.style.display = (wide || ytId) ? 'inline-flex' : 'none'; }
     else { aw.style.display = 'none'; }
 
     var tag = el('tag'); tag.innerHTML = '';
@@ -407,7 +438,7 @@
     // Reparto con fotos (solo panorámica)
     var cast = el('cast'); cast.innerHTML = '';
     var castwrap = el('castwrap');
-    if (wide && p.cast && p.cast.length) {
+    if ((wide || ytId) && p.cast && p.cast.length) {
       el('castlbl').innerHTML = '';
       el('castlbl').appendChild(document.createTextNode(L.cast));
       for (var i = 0; i < p.cast.length; i++) {
