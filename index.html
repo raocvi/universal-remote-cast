@@ -37,10 +37,14 @@
   #idle{text-align:center;width:100%}
   #idle h1{font-size:4.2vw;margin:0 0 2vh;font-weight:800}
   #idle p{font-size:2vw;color:#9ea3b5;margin:0}
-  #foot{position:absolute;right:3vw;bottom:2.4vh;font-size:1.25vw;color:#4a4f60}
+  #foot{position:absolute;right:3vw;bottom:2.4vh;font-size:1.25vw;color:#4a4f60;z-index:3}
+  /* Modo teléfono: la pantalla del teléfono a toda la altura del TV, tal cual (dueño: «full
+     screen conservando el diseño»), y el mismo fotograma difuminado llenando los lados. */
   .frame{position:absolute;top:50%;left:50%;-webkit-transform:translate(-50%,-50%);transform:translate(-50%,-50%);
-    height:94vh;width:auto;border-radius:2.6vh;background:#000;
-    box-shadow:0 24px 80px rgba(0,0,0,.7);display:none}
+    height:100vh;width:auto;background:#000;display:none;z-index:2}
+  #bgf{position:absolute;top:-6vh;left:-6vw;right:-6vw;bottom:-6vh;background-position:center;background-size:cover;
+    -webkit-filter:blur(3.5vw) brightness(.55);filter:blur(3.5vw) brightness(.55);opacity:0;transition:opacity .5s ease;z-index:0}
+  body.wide #bgf,body.yt #bgf,body.welcoming #bgf{display:none!important}
   .hide{display:none!important}
 
   /* ── Bienvenida a pantalla completa: la primera imagen que ve el usuario del espejo.
@@ -143,7 +147,7 @@
   body.wide #scrim{background:
     linear-gradient(0deg,rgba(0,0,0,.94) 0%,rgba(0,0,0,.62) 26%,rgba(0,0,0,0) 58%),
     linear-gradient(90deg,rgba(0,0,0,.78) 0%,rgba(0,0,0,.3) 34%,rgba(0,0,0,0) 62%)}
-  body.wide .frame{left:16vw;height:78vh;border-radius:2vh;box-shadow:0 30px 90px rgba(0,0,0,.8)}
+  body.wide .frame{left:16vw;height:78vh;border-radius:2vh;box-shadow:0 30px 90px rgba(0,0,0,.8);z-index:auto}
   body.wide #wrap{display:block;padding:0}
   body.wide #poster{display:none!important}
   body.wide #info{position:absolute;left:32vw;right:5vw;bottom:8vh;max-width:none}
@@ -232,7 +236,7 @@
   </div>
   <div id="wfoot">Google Cast</div>
 </div>
-<div id="bg"></div><div id="ytwrap"><iframe id="ytf" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div id="scrim"></div>
+<div id="bg"></div><div id="bgf"></div><div id="ytwrap"><iframe id="ytf" allow="autoplay; encrypted-media" allowfullscreen></iframe></div><div id="scrim"></div>
 <img id="f0" class="frame" alt=""><img id="f1" class="frame" alt="">
 <div id="wrap">
   <div id="idle">
@@ -256,7 +260,7 @@
 (function () {
   var last = -1, lastF = -1, fails = 0, cur = 0, live = false, wide = false;
   var L = { series: "Series", cast: "Cast", oscar: "Academy Award winner for Best Picture", director: "Directed by" }; // rótulos: los manda el teléfono en su idioma (p.l)
-  var PV = "2026-09-12.6"; // si el teléfono trae otra versión, esta página está vieja: recargar
+  var PV = "2026-09-12.7"; // si el teléfono trae otra versión, esta página está vieja: recargar
   var CAST = true; // receptor de Google Cast: sin video de apertura (no hay servidor del teléfono), sin recarga por versión
   // Si el teléfono deja de contestar (cambió de dirección o de red), saltar a la página en la nube,
   // que redirige a la dirección nueva: la pestaña vieja del Samsung deja de ser un callejón sin salida.
@@ -375,7 +379,7 @@
     if (next === wide) return;
     wide = next;
     document.body.className = (wide ? 'wide' : '') + (document.body.className.indexOf('welcoming') >= 0 ? ' welcoming' : '') + (document.body.className.indexOf('yt') >= 0 ? ' yt' : '');
-    if (wide) { el('idle').className = 'hide'; el('wrap').className = ''; }
+    if (wide) { el('idle').className = 'hide'; el('wrap').className = ''; el('scrim').style.opacity = '1'; el('bgf').style.opacity = '0'; }
     else if (live) {
       // De panorámica a «Teléfono» con vídeo en marcha: la ficha se esconde y el fondo se
       // apaga; si no, el teléfono quedaba encima del texto (visto por el dueño).
@@ -401,6 +405,7 @@
         el('idle').className = 'hide';
         if (!wide) { el('wrap').className = 'hide'; el('bg').style.opacity = '0'; }
       }
+      if (!wide) { var bf = el('bgf'); bf.style.backgroundImage = 'url(' + next.src + ')'; bf.style.opacity = '1'; el('scrim').style.opacity = '0'; }
     };
     next.onerror = function () { report('img', { id: ts, len: b64 ? b64.length : 0, head: b64 ? b64.slice(0, 12) : '' }); };
     next.src = 'data:image/jpeg;base64,' + b64;
