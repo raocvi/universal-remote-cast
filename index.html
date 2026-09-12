@@ -200,11 +200,11 @@
   body.yt #tag{font-size:1.4vw;color:#dfe3ef;margin-bottom:1vh;text-shadow:0 1px 10px rgba(0,0,0,.7)}
   body.yt #ov{font-size:1.35vw;line-height:1.45;max-width:none;color:#eceef5;text-shadow:0 1px 12px rgba(0,0,0,.7);
     display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
-  body.yt #castwrap{display:block;position:fixed;left:3vw;top:14vh;bottom:28vh;width:11vw;overflow:hidden}
+  body.yt #castwrap{display:block;position:fixed;left:3vw;top:12vh;bottom:30vh;width:11vw;overflow:hidden}
   body.yt #castlbl{font-size:1vw;letter-spacing:.12em;text-transform:uppercase;color:#d7dae4;margin-bottom:1vh;font-weight:700;text-shadow:0 1px 10px rgba(0,0,0,.8)}
-  body.yt #cast{display:-webkit-box;display:flex;-webkit-box-orient:vertical;flex-direction:column;gap:1.1vh;overflow:hidden}
+  body.yt #cast{display:-webkit-box;display:flex;-webkit-box-orient:vertical;flex-direction:column;gap:.7vh;overflow:hidden}
   body.yt .actor{width:11vw;text-align:center;-webkit-box-flex:0;flex:0 0 auto}
-  body.yt .actor .ph{width:3.7vw;height:3.7vw;border-radius:50%;background:#2a2a33 center/cover no-repeat;margin:0 auto .4vh;
+  body.yt .actor .ph{width:3.2vw;height:3.2vw;border-radius:50%;background:#2a2a33 center/cover no-repeat;margin:0 auto .4vh;
     border:2px solid rgba(255,255,255,.4);box-shadow:0 4px 16px rgba(0,0,0,.55)}
   body.yt .actor .nm{font-size:.95vw;line-height:1.2;color:#f2f3f8;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 8px rgba(0,0,0,.8)}
   body.yt .actor .ch{display:none}
@@ -251,7 +251,7 @@
 (function () {
   var last = -1, lastF = -1, fails = 0, cur = 0, live = false, wide = false;
   var L = { series: "Series", cast: "Cast", oscar: "Academy Award winner for Best Picture", director: "Directed by" }; // rótulos: los manda el teléfono en su idioma (p.l)
-  var PV = "2026-09-12.1"; // si el teléfono trae otra versión, esta página está vieja: recargar
+  var PV = "2026-09-12.2"; // si el teléfono trae otra versión, esta página está vieja: recargar
   var CAST = true; // receptor de Google Cast: sin video de apertura (no hay servidor del teléfono), sin recarga por versión
   // Si el teléfono deja de contestar (cambió de dirección o de red), saltar a la página en la nube,
   // que redirige a la dirección nueva: la pestaña vieja del Samsung deja de ser un callejón sin salida.
@@ -280,8 +280,11 @@
   // se retira y la bienvenida animada empieza desde cero. welcomeAt se pone al
   // terminar el video para que la bienvenida dure sus 10 s completos después.
   var vid = document.getElementById('wvid'), vidTimer = null, vidStarted = false;
+  // Sin expresiones regulares con escapes: este script va dentro de una plantilla de TS y los
+  // escapes de regex (límite de palabra, espacio) se pierden por el camino; la clase «yt» nunca se quitaba (foto del dueño, 118).
+  function removeClass(name) { document.body.className = document.body.className.split(' ').filter(function (k) { return k && k !== name; }).join(' '); }
   function setWelcoming(on) {
-    var b = document.body, c = b.className.replace(/s*welcoming/g, '');
+    var b = document.body, c = b.className.split(' ').filter(function (k) { return k && k !== 'welcoming'; }).join(' ');
     b.className = on ? (c ? c + ' welcoming' : 'welcoming') : c;
   }
   function videoDone() {
@@ -476,7 +479,7 @@
   function applyYt(id) {
     var wrap = document.getElementById('ytwrap'), f = document.getElementById('ytf');
     if (!id) {
-      if (ytId) { ytId = ''; f.src = 'about:blank'; document.body.className = document.body.className.replace(/s*yt/g, ''); }
+      if (ytId) { ytId = ''; f.src = 'about:blank'; removeClass('yt'); }
       return;
     }
     if (id === ytId) return;
