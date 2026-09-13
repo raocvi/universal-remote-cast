@@ -167,8 +167,10 @@
     box-shadow:0 2px 14px rgba(0,0,0,.45)}
   #castwrap{display:none}
   /* Reparto en columna a la derecha (el teléfono ocupa la izquierda; en Clips va a la izquierda) */
-  body.wide #castwrap{display:block;position:fixed;right:4vw;top:9vh;bottom:30vh;width:12vw;overflow:hidden}
-  body.wide #castlbl{font-size:1.1vw;letter-spacing:.12em;text-transform:uppercase;color:#d7dae4;margin-bottom:1vh;font-weight:700;text-align:center;text-shadow:0 1px 10px rgba(0,0,0,.8)}
+  /* Reparto igual que en Clips (misma medida y disposición), pero a la derecha: el teléfono
+     ocupa la izquierda. Una sola columna, sin envolver (petición del dueño, build 130). */
+  body.wide #castwrap{display:block;position:fixed;right:3vw;top:12vh;bottom:30vh;width:11vw;overflow:hidden}
+  body.wide #castlbl{font-size:1vw;letter-spacing:.12em;text-transform:uppercase;color:#d7dae4;margin-bottom:1vh;font-weight:700;text-shadow:0 1px 10px rgba(0,0,0,.8)}
   /* Director y productoras: bajo la línea de datos */
   #dir{display:none}
   body.wide #dir{display:block;font-size:1.35vw;color:#dfe3ef;margin-bottom:1.4vh;text-shadow:0 1px 10px rgba(0,0,0,.7)}
@@ -180,11 +182,11 @@
   body.wide .co img{height:2vw;max-width:9vw;display:block}
   body.wide .co span{font-size:1.1vw;font-weight:800;color:#111;letter-spacing:.02em;white-space:nowrap}
   /* Ocho actores en dos columnas de cuatro: caben enteros sin cortarse (dueño, build 125) */
-  body.wide #cast{display:-webkit-box;display:flex;-webkit-flex-wrap:wrap;flex-wrap:wrap;-webkit-box-pack:center;justify-content:center;gap:1vh .4vw;overflow:hidden}
-  body.wide .actor{width:5.6vw;text-align:center;-webkit-box-flex:0;flex:0 0 auto}
-  body.wide .actor .ph{width:3.6vw;height:3.6vw;border-radius:50%;background:#2a2a33 center/cover no-repeat;margin:0 auto .4vh;
-    border:2px solid rgba(255,255,255,.35);box-shadow:0 4px 16px rgba(0,0,0,.5)}
-  body.wide .actor .nm{font-size:.9vw;text-shadow:0 1px 8px rgba(0,0,0,.8);line-height:1.2;color:#f2f3f8;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  body.wide #cast{display:-webkit-box;display:flex;-webkit-box-orient:vertical;flex-direction:column;gap:.7vh;overflow:hidden}
+  body.wide .actor{width:11vw;text-align:center;-webkit-box-flex:0;flex:0 0 auto}
+  body.wide .actor .ph{width:3.2vw;height:3.2vw;border-radius:50%;background:#2a2a33 center/cover no-repeat;margin:0 auto .4vh;
+    border:2px solid rgba(255,255,255,.4);box-shadow:0 4px 16px rgba(0,0,0,.55)}
+  body.wide .actor .nm{font-size:.95vw;line-height:1.2;color:#f2f3f8;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 8px rgba(0,0,0,.8)}
   body.wide .actor .ch{display:none}
   /* ── Clips (tráiler de fondo): título en la cabecera, reparto en columna a la izquierda,
         datos y sinopsis abajo; nada se solapa con nada (petición del dueño, foto build 116).
@@ -262,7 +264,7 @@
 (function () {
   var last = -1, lastF = -1, fails = 0, cur = 0, live = false, wide = false;
   var L = { series: "Series", cast: "Cast", oscar: "Academy Award winner for Best Picture", director: "Directed by" }; // rótulos: los manda el teléfono en su idioma (p.l)
-  var PV = "2026-09-12.10"; // si el teléfono trae otra versión, esta página está vieja: recargar
+  var PV = "2026-09-13.1"; // si el teléfono trae otra versión, esta página está vieja: recargar
   var CAST = true; // receptor de Google Cast: sin video de apertura (no hay servidor del teléfono), sin recarga por versión
   // Si el teléfono deja de contestar (cambió de dirección o de red), saltar a la página en la nube,
   // que redirige a la dirección nueva: la pestaña vieja del Samsung deja de ser un callejón sin salida.
@@ -466,7 +468,8 @@
     if ((wide || ytId) && p.cast && p.cast.length) {
       el('castlbl').innerHTML = '';
       el('castlbl').appendChild(document.createTextNode(L.cast));
-      for (var i = 0; i < p.cast.length; i++) {
+      var maxCast = 6;   // la columna solo muestra seis sin cortar (dueño, build 130)
+      for (var i = 0; i < p.cast.length && i < maxCast; i++) {
         var a = p.cast[i];
         var box = document.createElement('div'); box.className = 'actor';
         var ph = document.createElement('div'); ph.className = 'ph';
