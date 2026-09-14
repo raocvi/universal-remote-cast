@@ -28,6 +28,7 @@
   <p>Teclea el código que muestra el televisor. Primero se miden 10 clics (unos 25 s) con el micrófono cerrado; después se abre y te oirás por el TV. Deja el teléfono a menos de 2 m del TV con el volumen del TV a la mitad.</p>
   <input id="code" maxlength="6" autocapitalize="characters" autocomplete="off" placeholder="CÓDIGO">
   <button id="go">Conectar y medir</button>
+  <button id="clap" class="sec" style="display:none">Medir con un aplauso</button>
   <button id="stop" class="sec" style="display:none">Terminar</button>
   <div id="big">—</div>
   <div id="log">Listo.</div>
@@ -120,8 +121,31 @@
       }
       if (delays.length >= 10) {
         micGain.gain.value = 1;
+        $('clap').style.display = '';
         log('Medición completa. Micrófono ABIERTO: habla para juzgar de oído. Si se forma eco en bucle, baja el volumen del TV o aléjate.');
       }
+    };
+
+    // Medida con aplauso: el micro oye la palmada directa y luego la misma palmada saliendo por
+    // el TV. El tiempo entre los dos picos es el retraso real de toda la cadena, sin depender de
+    // cómo Safari mete el clic sintético en el stream. Se usa el micro crudo (sin filtro).
+    const anRaw = ctx.createAnalyser(); anRaw.fftSize = 1024; src.connect(anRaw);
+    const rawBuf = new Float32Array(anRaw.fftSize);
+    $('clap').onclick = () => {
+      log('Da UNA palmada fuerte cerca del teléfono (en 3 s)…');
+      const t0 = ctx.currentTime, peaks = [];
+      let lastPeakAt = -1;
+      (function watch() {
+        anRaw.getFloatTimeDomainData(rawBuf);
+        let peak = 0; for (let i = 0; i < rawBuf.length; i++) { const v = Math.abs(rawBuf[i]); if (v > peak) peak = v; }
+        const now = ctx.currentTime;
+        if (peak > 0.25 && now - lastPeakAt > 0.08) { peaks.push(now); lastPeakAt = now; }
+        if (now - t0 < 3.5 && peaks.length < 4) { requestAnimationFrame(watch); return; }
+        if (peaks.length < 2) { log('Aplauso: no se oyeron dos picos (¿TV bajo? ¿palmada floja?)'); return; }
+        const gaps = []; for (let i = 1; i < peaks.length; i++) gaps.push((peaks[i] - peaks[i - 1]) * 1000);
+        log('Aplauso: picos cada ' + gaps.map(g => g.toFixed(0)).join(' / ') + ' ms → retraso real ≈ ' + gaps[0].toFixed(0) + ' ms');
+        verdict(gaps[0]);
+      })();
     };
 
     pc = new RTCPeerConnection({ iceServers: [] });
