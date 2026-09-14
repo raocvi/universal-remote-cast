@@ -5,23 +5,29 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Karaoke · Universal Remote</title>
 <!--
-  Escenario de KARAOKE en el televisor (Universal Remote, 2026-09-13).
-  Se abre en el navegador del TV (o en Cast). Muestra un código; la app se conecta por
-  WebRTC (Wi‑Fi de casa): por un canal de datos manda qué vídeo de karaoke de YouTube
-  reproducir (embebido aquí, con la letra dentro del vídeo) y por audio llega la voz del
-  que canta, que el TV mezcla encima. Por internet solo va la señalización (voice-signal).
+  Escenario de KARAOKE en el televisor (Universal Remote, 2026-09-14, protocolo v2).
+  Corre dentro del receptor de Cast (marco) o en el navegador del TV. El TV es el dueño de
+  la cola: cada teléfono (varios a la vez, cada uno con su micro) manda órdenes por su canal
+  de datos WebRTC y el TV reparte el estado a todos. La voz de cada teléfono llega por
+  WebRTC (Wi‑Fi de casa) y se mezcla aquí encima del vídeo de karaoke de YouTube embebido
+  (la letra va dentro del vídeo). Por internet solo va la señalización (voice-signal).
+  Para unirse: QR en pantalla (abre la app con el código) o el código de 6 letras.
   JavaScript ES5 a propósito: los navegadores de TV son viejos (Tizen, webOS).
 -->
 <style>
   html,body{margin:0;height:100%;background:#05060a;color:#fff;font-family:-apple-system,Helvetica,Arial,sans-serif;overflow:hidden}
   #player{position:absolute;left:0;top:0;width:100%;height:100%;background:#000}
-  #lobby{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:4vh 6vw;background:radial-gradient(circle at 50% 30%,#1a1030 0%,#05060a 70%)}
-  #lobby h1{font-size:5vh;font-weight:800;letter-spacing:.2vh;margin:0 0 1vh}
-  #lobby p{font-size:3vh;color:#9aa3b2;margin:0 0 2vh}
-  #code{font-size:20vh;font-weight:800;letter-spacing:2vh;margin:1vh 0 2vh;font-variant-numeric:tabular-nums}
-  #status{font-size:3.4vh;color:#c7ccd6;min-height:5vh}
+  #lobby{position:absolute;inset:0;display:flex;flex-direction:row;align-items:center;justify-content:center;gap:6vw;padding:4vh 6vw;background:radial-gradient(circle at 30% 30%,#2a1348 0%,#05060a 65%)}
+  #lobby .txt{max-width:46vw}
+  #lobby h1{font-size:6vh;font-weight:800;letter-spacing:.2vh;margin:0 0 1vh;background:linear-gradient(90deg,#FA7AF8,#F7B043,#57BEFD,#D75FE4);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  #lobby p{font-size:3vh;color:#9aa3b2;margin:0 0 2vh;line-height:1.4}
+  #code{font-size:12vh;font-weight:800;letter-spacing:1.4vh;margin:1vh 0 1vh;font-variant-numeric:tabular-nums}
+  #status{font-size:3vh;color:#c7ccd6;min-height:5vh}
   .ok{color:#30d158}.bad{color:#ff453a}
-  #hud{position:absolute;left:0;right:0;bottom:0;padding:2vh 3vw 2.5vh;background:linear-gradient(180deg,rgba(0,0,0,0) 0%,rgba(0,0,0,.75) 60%);display:none}
+  #qrWrap{background:#fff;padding:2.2vh;border-radius:3vh;box-shadow:0 0 8vh rgba(215,95,228,.35)}
+  #qr img,#qr canvas{display:block;width:34vh;height:34vh}
+  #qrCap{text-align:center;color:#111;font-size:2.2vh;font-weight:700;margin-top:1.2vh}
+  #hud{position:absolute;left:0;right:0;bottom:0;padding:2vh 3vw 2.5vh;background:linear-gradient(180deg,rgba(0,0,0,0) 0%,rgba(0,0,0,.78) 60%);display:none}
   #now{font-size:4vh;font-weight:800;text-shadow:0 2px 12px rgba(0,0,0,.8)}
   #singer{font-size:3vh;color:#FA7AF8;font-weight:700;margin-top:.5vh}
   #next{font-size:2.6vh;color:#c7ccd6;margin-top:1.2vh}
@@ -29,40 +35,54 @@
   #meterWrap{position:absolute;right:3vw;top:3vh;width:22vw;height:2.2vh;border-radius:2vh;background:rgba(255,255,255,.12);overflow:hidden;display:none}
   #bar{height:100%;width:0;background:linear-gradient(90deg,#57BEFD,#D75FE4,#F64357);transition:width .08s}
   #glow{position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 0 0 0 rgba(215,95,228,0);transition:box-shadow .15s}
-  #toast{position:absolute;left:50%;top:6vh;transform:translateX(-50%);background:rgba(20,20,28,.92);border:1px solid rgba(255,255,255,.12);border-radius:2vh;padding:1.6vh 3vw;font-size:3vh;display:none}
-  #codeMini{position:absolute;left:3vw;top:3vh;font-size:2.4vh;color:#6b7280;letter-spacing:.4vh;display:none}
+  #toast{position:absolute;left:50%;top:6vh;transform:translateX(-50%);background:rgba(20,20,28,.92);border:1px solid rgba(255,255,255,.12);border-radius:2vh;padding:1.6vh 3vw;font-size:3vh;display:none;z-index:5}
+  #joinMini{position:absolute;left:3vw;top:3vh;display:none;align-items:center;gap:1.2vw;background:rgba(0,0,0,.55);border-radius:2vh;padding:1vh 1.4vw}
+  #joinMini .q{background:#fff;padding:.6vh;border-radius:1vh}
+  #joinMini .q img,#joinMini .q canvas{display:block;width:9vh;height:9vh}
+  #joinMini .t{font-size:2.2vh;color:#c7ccd6;line-height:1.35}
+  #joinMini .t b{color:#fff;letter-spacing:.3vh}
 </style>
 </head>
 <body>
 <div id="player"></div>
 <div id="glow"></div>
 <div id="lobby">
-  <h1>🎤 KARAOKE</h1>
-  <p>En la app: Herramientas › Karaoke › teclea este código</p>
-  <div id="code">------</div>
-  <div id="status">Esperando al teléfono…</div>
+  <div class="txt">
+    <h1>KARAOKE</h1>
+    <p>Escanea el código con la app <b>Universal Remote</b> (Herramientas › Karaoke) o teclea:</p>
+    <div id="code">------</div>
+    <div id="status">Esperando al teléfono…</div>
+  </div>
+  <div id="qrWrap"><div id="qr"></div><div id="qrCap">Escanéame para unirte</div></div>
 </div>
 <div id="hud"><div id="now"></div><div id="singer"></div><div id="next"></div></div>
 <div id="meterWrap"><div id="bar"></div></div>
-<div id="codeMini"></div>
+<div id="joinMini"><div class="q" id="qrMini"></div><div class="t">Únete: escanea<br>o código <b id="codeMini"></b></div></div>
 <div id="toast"></div>
-<audio id="out" autoplay playsinline></audio>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
 (function () {
   var SIGNAL = 'https://qojtwgzpazwompyvtpjk.supabase.co/functions/v1/voice-signal';
+  var JOIN_BASE = 'https://raocvi.github.io/universal-remote-cast/karaoke/join.html?code=';
   var ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  var code = '';
-  for (var i = 0; i < 6; i++) code += ALPHABET.charAt(Math.floor(Math.random() * ALPHABET.length));
   var $ = function (id) { return document.getElementById(id); };
+  var qs = {}; try { location.search.replace(/^\?/, '').split('&').forEach(function (kv) { var p = kv.split('='); if (p[0]) qs[decodeURIComponent(p[0])] = decodeURIComponent(p[1] || ''); }); } catch (e) {}
+  var code = /^[A-Z2-9]{6}$/.test(String(qs.code || '').toUpperCase()) ? String(qs.code).toUpperCase() : '';
+  if (!code) { for (var i = 0; i < 6; i++) code += ALPHABET.charAt(Math.floor(Math.random() * ALPHABET.length)); }
   $('code').textContent = code; $('codeMini').textContent = code;
-  var out = $('out'), lastId = 0, pc = null, ch = null, audioCtx = null, player = null, playerReady = false, pending = null;
-  var current = { title: '', singer: '' };
+  try {
+    new QRCode($('qr'), { text: JOIN_BASE + code, width: 512, height: 512, correctLevel: QRCode.CorrectLevel.M });
+    new QRCode($('qrMini'), { text: JOIN_BASE + code, width: 160, height: 160, correctLevel: QRCode.CorrectLevel.L });
+  } catch (e) {}
+
+  var lastId = 0, peers = {}, npeers = 0, audioCtx = null, player = null, playerReady = false, pending = null;
+  var queue = { now: null, next: [] }, playing = false;
 
   function status(t, cls) { $('status').textContent = t; $('status').className = cls || ''; }
   function toast(t, ms) { var el = $('toast'); el.textContent = t; el.style.display = 'block'; clearTimeout(toast.h); toast.h = setTimeout(function () { el.style.display = 'none'; }, ms || 3000); }
-  function send(obj) { try { if (ch && ch.readyState === 'open') ch.send(JSON.stringify(obj)); } catch (e) {} }
+  function esc(s) { return String(s).replace(/[&<>]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; }); }
 
-  // ── Señalización (solo para abrir la conexión) ──
+  // ── Señalización (solo para abrir cada conexión; un teléfono = un «peer») ──
   function post(kind, payload) {
     var x = new XMLHttpRequest(); x.open('POST', SIGNAL, true); x.setRequestHeader('Content-Type', 'application/json');
     x.send(JSON.stringify({ code: code, to: 'phone', kind: kind, payload: payload }));
@@ -73,73 +93,129 @@
     x.onreadystatechange = function () {
       if (x.readyState !== 4) return;
       if (x.status === 200) { try { var msgs = JSON.parse(x.responseText).messages || []; for (var k = 0; k < msgs.length; k++) { lastId = msgs[k].id; handle(msgs[k].kind, msgs[k].payload); } } catch (e) {} }
-      setTimeout(poll, pc ? 2000 : 400);
+      setTimeout(poll, npeers ? 1500 : 400);
     };
     x.send();
   }
   function handle(kind, payload) {
-    if (kind === 'offer') { start(payload); return; }
-    if (kind === 'ice' && pc) { try { pc.addIceCandidate(new RTCIceCandidate(payload)); } catch (e) {} return; }
-    if (kind === 'bye') { bye(); }
-  }
-  function bye() {
-    if (pc) { try { pc.close(); } catch (e) {} }
-    pc = null; ch = null;
-    if (player && playerReady) { try { player.stopVideo(); } catch (e) {} }
-    $('lobby').style.display = 'flex'; $('hud').style.display = 'none'; $('meterWrap').style.display = 'none'; $('codeMini').style.display = 'none';
-    status('El teléfono cerró la sesión. Recarga para otra.', 'bad');
+    var pid = payload && payload.peer ? String(payload.peer) : 'p0';
+    if (kind === 'offer') { connect(pid, payload); return; }
+    if (kind === 'ice' && peers[pid]) { try { peers[pid].pc.addIceCandidate(new RTCIceCandidate(payload.candidate || payload)); } catch (e) {} return; }
+    if (kind === 'bye' && peers[pid]) { drop(pid); }
   }
 
-  // ── WebRTC: voz + canal de datos ──
-  function start(offer) {
-    if (!window.RTCPeerConnection) { status('Este navegador de TV no tiene WebRTC', 'bad'); post('bye', { reason: 'no_webrtc' }); return; }
+  // ── Un teléfono se conecta: voz + canal de datos ──
+  function connect(pid, offer) {
+    if (!window.RTCPeerConnection) { status('Este navegador de TV no tiene WebRTC', 'bad'); post('bye', { peer: pid, reason: 'no_webrtc' }); return; }
+    if (peers[pid]) drop(pid);
+    var pc = new RTCPeerConnection({ iceServers: [] });
+    var peer = { pc: pc, ch: null, name: '', src: null };
+    peers[pid] = peer; npeers++;
     status('Conectando con el teléfono…');
-    pc = new RTCPeerConnection({ iceServers: [] });
-    pc.onicecandidate = function (e) { if (e.candidate) post('ice', e.candidate.toJSON ? e.candidate.toJSON() : e.candidate); };
+    pc.onicecandidate = function (e) { if (e.candidate) post('ice', { peer: pid, candidate: e.candidate.toJSON ? e.candidate.toJSON() : e.candidate }); };
     pc.oniceconnectionstatechange = function () {
       var s = pc.iceConnectionState;
       if (s === 'connected' || s === 'completed') { status('Conectado. Elige una canción en el teléfono.', 'ok'); }
-      else if (s === 'failed') status('Conexión perdida', 'bad');
+      else if (s === 'failed' || s === 'closed') drop(pid);
     };
     pc.ondatachannel = function (e) {
-      ch = e.channel;
-      ch.onmessage = function (msg) { var m; try { m = JSON.parse(msg.data); } catch (err) { return; } onCommand(m); };
+      peer.ch = e.channel;
+      peer.ch.onmessage = function (msg) { var m; try { m = JSON.parse(msg.data); } catch (err) { return; } onCommand(pid, m); };
+      peer.ch.onopen = function () { sendTo(pid, stateMsg()); };
     };
     pc.ontrack = function (e) {
       var stream = e.streams && e.streams[0] ? e.streams[0] : new MediaStream([e.track]);
       try { if (e.receiver && 'playoutDelayHint' in e.receiver) e.receiver.playoutDelayHint = 0; } catch (err) {}
-      out.srcObject = stream;
-      var p = out.play(); if (p && p.catch) p.catch(function () { toast('Pulsa OK en el mando para activar el sonido', 6000); });
-      meter(stream);
+      try { if (e.receiver && 'jitterBufferTarget' in e.receiver) e.receiver.jitterBufferTarget = 0; } catch (err) {}
+      mix(pid, stream);
     };
-    pc.setRemoteDescription(new RTCSessionDescription(offer)).then(function () { return pc.createAnswer(); })
-      .then(function (answer) { return pc.setLocalDescription(answer).then(function () { post('answer', { type: answer.type, sdp: answer.sdp }); }); })
-      .catch(function (err) { status('Error WebRTC: ' + (err && err.message ? err.message : err), 'bad'); });
+    pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: offer.sdp })).then(function () { return pc.createAnswer(); })
+      .then(function (answer) { return pc.setLocalDescription(answer).then(function () { post('answer', { peer: pid, type: answer.type, sdp: answer.sdp }); }); })
+      .catch(function (err) { status('Error WebRTC: ' + (err && err.message ? err.message : err), 'bad'); drop(pid); });
+  }
+  function drop(pid) {
+    var p = peers[pid]; if (!p) return;
+    try { if (p.src) p.src.disconnect(); } catch (e) {}
+    try { if (p.el) { p.el.pause(); p.el.srcObject = null; p.el.parentNode.removeChild(p.el); } } catch (e) {}
+    try { p.pc.close(); } catch (e) {}
+    delete peers[pid]; npeers--;
+    broadcast(stateMsg());
+    if (!npeers) { if (playerReady) { try { player.pauseVideo(); } catch (e) {} } playing = false; }
+  }
+  function sendTo(pid, obj) { var p = peers[pid]; try { if (p && p.ch && p.ch.readyState === 'open') p.ch.send(JSON.stringify(obj)); } catch (e) {} }
+  function broadcast(obj) { for (var k in peers) sendTo(k, obj); }
+
+  // ── Voz: cada teléfono se mezcla por WebAudio (latencia mínima); un <audio> mudo por
+  //    stream para que Chromium lo alimente. Si WebAudio no existe, el <audio> suena solo.
+  function ctx() {
+    if (audioCtx) return audioCtx;
+    try { var AC = window.AudioContext || window.webkitAudioContext; audioCtx = AC ? new AC({ latencyHint: 'interactive' }) : null; } catch (e) { audioCtx = null; }
+    if (audioCtx) startMeter();
+    return audioCtx;
+  }
+  var analyser = null;
+  function startMeter() {
+    analyser = audioCtx.createAnalyser(); analyser.fftSize = 512; analyser.connect(audioCtx.destination);
+    var buf = new Uint8Array(analyser.fftSize);
+    (function tick() {
+      analyser.getByteTimeDomainData(buf);
+      var peak = 0; for (var i = 0; i < buf.length; i++) { var v = Math.abs(buf[i] - 128) / 128; if (v > peak) peak = v; }
+      $('bar').style.width = Math.min(100, peak * 140) + '%';
+      $('glow').style.boxShadow = 'inset 0 0 ' + (peak * 22) + 'vh ' + (peak * 4) + 'vh rgba(215,95,228,' + Math.min(.7, peak * 1.2) + ')';
+      requestAnimationFrame(tick);
+    })();
+  }
+  function mix(pid, stream) {
+    var p = peers[pid]; if (!p) return;
+    var el = document.createElement('audio'); el.autoplay = true; el.setAttribute('playsinline', ''); el.srcObject = stream; document.body.appendChild(el); p.el = el;
+    var c = ctx();
+    if (c) { try { p.src = c.createMediaStreamSource(stream); p.src.connect(analyser); el.muted = true; } catch (e) { el.muted = false; } }
+    var pr = el.play(); if (pr && pr.catch) pr.catch(function () { toast('Pulsa OK en el mando para activar el sonido', 6000); });
   }
 
-  // ── Órdenes de la app ──
-  function onCommand(m) {
+  // ── Cola (el TV manda) ──
+  function stateMsg() {
+    return { t: 'state', now: queue.now, next: queue.next, playing: playing, peers: npeers };
+  }
+  function has(id) { if (queue.now && queue.now.videoId === id) return true; for (var i = 0; i < queue.next.length; i++) if (queue.next[i].videoId === id) return true; return false; }
+  function enqueue(song) {
+    if (!song || !/^[A-Za-z0-9_-]{11}$/.test(String(song.videoId || '')) || has(song.videoId)) return;
+    var s = { videoId: song.videoId, title: String(song.title || ''), channel: String(song.channel || ''), thumb: song.thumb || null, singer: String(song.singer || '') };
+    if (!queue.now) { queue.now = s; play(s); } else queue.next.push(s);
+    broadcast(stateMsg()); hud();
+  }
+  function advance() {
+    queue.now = queue.next.shift() || null;
+    if (queue.now) play(queue.now); else { playing = false; if (playerReady) { try { player.stopVideo(); } catch (e) {} } }
+    broadcast(stateMsg()); hud();
+  }
+  function onCommand(pid, m) {
     if (!m || !m.t) return;
-    if (m.t === 'stats?') { stats(); return; }
-    if (m.t === 'play') { current = { title: m.title || '', singer: m.singer || '' }; showStage(); load(m.videoId); return; }
+    if (m.t === 'hello') { peers[pid].name = String(m.name || ''); sendTo(pid, stateMsg()); return; }
+    if (m.t === 'stats?') { stats(pid); return; }
+    if (m.t === 'add') { enqueue(m.song); return; }
+    if (m.t === 'remove') { queue.next = queue.next.filter(function (s) { return s.videoId !== m.videoId; }); broadcast(stateMsg()); hud(); return; }
+    if (m.t === 'up') { for (var i = 1; i < queue.next.length; i++) if (queue.next[i].videoId === m.videoId) { var tmp = queue.next[i - 1]; queue.next[i - 1] = queue.next[i]; queue.next[i] = tmp; break; } broadcast(stateMsg()); hud(); return; }
+    if (m.t === 'skip') { advance(); return; }
     if (m.t === 'pause') { if (playerReady) player.pauseVideo(); return; }
     if (m.t === 'resume') { if (playerReady) player.playVideo(); return; }
-    if (m.t === 'stop') { if (playerReady) player.stopVideo(); $('now').textContent = ''; $('singer').textContent = ''; return; }
-    if (m.t === 'queue') { var n = m.next || []; $('next').innerHTML = n.length ? 'Siguen: ' + n.map(function (x) { return '<span>' + esc(x.singer ? x.singer + ' · ' : '') + esc(x.title) + '</span>'; }).join(' &nbsp;·&nbsp; ') : ''; return; }
     if (m.t === 'volume') { if (playerReady) player.setVolume(Math.max(0, Math.min(100, Number(m.music) || 0))); return; }
   }
-  function esc(s) { return String(s).replace(/[&<>]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; }); }
-  function showStage() {
-    $('lobby').style.display = 'none'; $('hud').style.display = 'block'; $('meterWrap').style.display = 'block'; $('codeMini').style.display = 'block';
-    $('now').textContent = current.title; $('singer').textContent = current.singer ? '🎤 ' + current.singer : '';
+  function hud() {
+    if (!queue.now) return;
+    $('lobby').style.display = 'none'; $('hud').style.display = 'block'; $('meterWrap').style.display = 'block'; $('joinMini').style.display = 'flex';
+    $('now').textContent = queue.now.title || queue.now.videoId;
+    $('singer').textContent = queue.now.singer ? '🎤 ' + queue.now.singer : '';
+    var n = queue.next.slice(0, 4);
+    $('next').innerHTML = n.length ? 'Siguen: ' + n.map(function (x) { return '<span>' + esc(x.singer ? x.singer + ' · ' : '') + esc(x.title || x.videoId) + '</span>'; }).join(' &nbsp;·&nbsp; ') : '';
   }
-  function stats() {
-    if (!pc || !pc.getStats) return;
-    var p = pc.getStats(); if (!p || !p.then) return;
-    p.then(function (report) {
+  function stats(pid) {
+    var p = peers[pid]; if (!p || !p.pc.getStats) return;
+    var pr = p.pc.getStats(); if (!pr || !pr.then) return;
+    pr.then(function (report) {
       var bufferMs = null;
       report.forEach(function (r) { if (r.type === 'inbound-rtp' && (r.kind === 'audio' || r.mediaType === 'audio') && r.jitterBufferEmittedCount > 0) bufferMs = r.jitterBufferDelay / r.jitterBufferEmittedCount * 1000; });
-      send({ t: 'stats', bufferMs: bufferMs });
+      sendTo(pid, { t: 'stats', bufferMs: bufferMs });
     }).catch(function () {});
   }
 
@@ -150,41 +226,32 @@
       width: '100%', height: '100%', videoId: '',
       playerVars: { autoplay: 1, controls: 0, rel: 0, modestbranding: 1, playsinline: 1, iv_load_policy: 3, fs: 0, disablekb: 1 },
       events: {
-        onReady: function () { playerReady = true; if (pending) { load(pending); pending = null; } },
+        onReady: function () { playerReady = true; if (pending) { play(pending); pending = null; } },
         onStateChange: function (e) {
-          if (e.data === YT.PlayerState.ENDED) { send({ t: 'ended' }); }
-          send({ t: 'state', playing: e.data === YT.PlayerState.PLAYING, title: current.title });
+          playing = e.data === YT.PlayerState.PLAYING;
+          if (e.data === YT.PlayerState.ENDED) { advance(); return; }
+          broadcast(stateMsg());
         },
-        onError: function (e) { send({ t: 'error', code: e.data }); toast('Este vídeo no se puede reproducir aquí. Elige otro en el teléfono.', 5000); },
+        onError: function (e) {
+          broadcast({ t: 'error', code: e.data, videoId: queue.now ? queue.now.videoId : '' });
+          toast('Este vídeo no se puede reproducir aquí. Pasando a la siguiente…', 4000);
+          setTimeout(advance, 1500);
+        },
       },
     });
   };
-  function load(videoId) {
-    if (!playerReady) { pending = videoId; return; }
-    try { player.loadVideoById(videoId); player.playVideo(); } catch (e) {}
-    // El navegador del TV puede exigir un toque para sonar: si no arranca en 2 s, avisar
-    setTimeout(function () { try { if (player.getPlayerState() !== YT.PlayerState.PLAYING) toast('Pulsa OK en el mando para arrancar', 6000); } catch (e) {} }, 2500);
-  }
-
-  // ── Medidor de voz ──
-  function meter(stream) {
-    try {
-      var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
-      audioCtx = new AC();
-      var src = audioCtx.createMediaStreamSource(stream), an = audioCtx.createAnalyser(); an.fftSize = 512; src.connect(an);
-      var buf = new Uint8Array(an.fftSize);
-      (function tick() {
-        an.getByteTimeDomainData(buf);
-        var peak = 0; for (var i = 0; i < buf.length; i++) { var v = Math.abs(buf[i] - 128) / 128; if (v > peak) peak = v; }
-        $('bar').style.width = Math.min(100, peak * 140) + '%';
-        $('glow').style.boxShadow = 'inset 0 0 ' + (peak * 22) + 'vh ' + (peak * 4) + 'vh rgba(215,95,228,' + Math.min(.7, peak * 1.2) + ')';
-        requestAnimationFrame(tick);
-      })();
-    } catch (e) {}
+  function play(song) {
+    if (!playerReady) { pending = song; return; }
+    try { player.loadVideoById(song.videoId); player.playVideo(); } catch (e) {}
+    setTimeout(function () { try { if (player.getPlayerState() !== YT.PlayerState.PLAYING && queue.now && queue.now.videoId === song.videoId) toast('Pulsa OK en el mando para arrancar', 6000); } catch (e) {} }, 2500);
   }
 
   // OK del mando / toque: desbloquea audio y arranca el vídeo si estaba esperando
-  function unlock() { try { out.play(); if (audioCtx && audioCtx.resume) audioCtx.resume(); if (playerReady) player.playVideo(); } catch (e) {} }
+  function unlock() {
+    try { if (audioCtx && audioCtx.resume) audioCtx.resume(); } catch (e) {}
+    for (var k in peers) { try { if (peers[k].el) peers[k].el.play(); } catch (e) {} }
+    try { if (playerReady && queue.now) player.playVideo(); } catch (e) {}
+  }
   document.addEventListener('keydown', unlock); document.addEventListener('click', unlock);
 
   poll();

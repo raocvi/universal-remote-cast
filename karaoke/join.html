@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Únete al karaoke · Universal Remote</title>
+<!-- Enlace del QR y de WhatsApp: abre la app con el código; si no está instalada, App Store. -->
+<style>
+  body{margin:0;background:#05060a;color:#fff;font-family:-apple-system,Helvetica,Arial,sans-serif;padding:32px 22px;text-align:center}
+  h1{font-size:26px;margin:24px 0 6px}
+  p{color:#9aa3b2;line-height:1.45}
+  .code{font-size:40px;font-weight:800;letter-spacing:10px;margin:14px 0 22px}
+  a.btn{display:block;background:#0a84ff;color:#fff;text-decoration:none;font-weight:700;font-size:18px;padding:16px;border-radius:14px;margin:10px 0}
+  a.sec{background:#1c1f28;color:#c7ccd6}
+</style>
+</head>
+<body>
+  <div style="font-size:56px">🎤</div>
+  <h1>Únete al karaoke</h1>
+  <p>Con la app <b>Universal Remote</b> añades canciones y cantas desde tu teléfono.</p>
+  <div class="code" id="code">------</div>
+  <a class="btn" id="open" href="#">Abrir en la app</a>
+  <a class="btn sec" href="https://apps.apple.com/app/id6789376407">No tengo la app · App Store</a>
+<script>
+(function () {
+  var m = /[?&]code=([A-Za-z0-9]{6})/.exec(location.search);
+  var code = m ? m[1].toUpperCase() : '';
+  document.getElementById('code').textContent = code || '------';
+  var deep = 'universalremote://karaoke/' + code;
+  var a = document.getElementById('open'); a.href = deep;
+  if (code) { setTimeout(function () { location.href = deep; }, 300); }
+})();
+</script>
+</body>
+</html>

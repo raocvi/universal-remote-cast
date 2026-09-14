@@ -264,7 +264,7 @@
 (function () {
   var last = -1, lastF = -1, fails = 0, cur = 0, live = false, wide = false;
   var L = { series: "Series", cast: "Cast", oscar: "Academy Award winner for Best Picture", director: "Directed by" }; // rótulos: los manda el teléfono en su idioma (p.l)
-  var PV = "2026-09-13.1"; // si el teléfono trae otra versión, esta página está vieja: recargar
+  var PV = "2026-09-14.1"; // si el teléfono trae otra versión, esta página está vieja: recargar
   var CAST = true; // receptor de Google Cast: sin video de apertura (no hay servidor del teléfono), sin recarga por versión
   // Si el teléfono deja de contestar (cambió de dirección o de red), saltar a la página en la nube,
   // que redirige a la dirección nueva: la pestaña vieja del Samsung deja de ser un callejón sin salida.
@@ -571,6 +571,7 @@
       var m = ev.data; if (!m) return;
       if (typeof m === 'string') { try { m = JSON.parse(m); } catch (e) { return; } }
       if (m.t === 's') { render(m.p || {}); return; }
+      if (m.t === 'k') { karaoke(m.url || ''); return; }
       if (m.t !== 'f') return;
       if (m.id < fid) return;
       if (m.id !== fid) { fid = m.id; parts = new Array(m.n); got = 0; }
@@ -586,6 +587,20 @@
     var opts = new cast.framework.CastReceiverOptions();
     opts.disableIdleTimeout = true;   // el espejo no reproduce «media»: sin esto el receptor se cierra solo
     ctx.start(opts);
+  }
+  // Karaoke dentro del receptor: la página del escenario (vídeo de YouTube + voz por WebRTC)
+  // va en un marco a pantalla completa. Con url vacía se quita y vuelve el espejo.
+  function karaoke(url) {
+    var old = document.getElementById('kframe');
+    if (old) old.parentNode.removeChild(old);
+    if (!url) return;
+    var f = document.createElement('iframe');
+    f.id = 'kframe';
+    f.src = url;
+    f.setAttribute('allow', 'autoplay; encrypted-media; fullscreen');
+    f.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;border:0;background:#000;z-index:1000';
+    document.body.appendChild(f);
+    if (document.getElementById('welcome').className.indexOf('playing') < 0) dismissWelcome();
   }
   if (CAST) startCast(); else poll();
 })();
