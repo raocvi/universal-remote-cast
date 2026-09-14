@@ -89,6 +89,25 @@
       if (s === 'connected' || s === 'completed') status('Conectado. Habla por el teléfono.', 'ok');
       else if (s === 'failed' || s === 'disconnected') status('Conexión perdida (' + s + ')', 'bad');
     };
+    // Canal de datos: la app pregunta cuánto búfer de reproducción tiene este navegador
+    pc.ondatachannel = function (e) {
+      var ch = e.channel;
+      ch.onmessage = function (msg) {
+        var m; try { m = JSON.parse(msg.data); } catch (err) { return; }
+        if (!m || m.t !== 'stats?' || !pc.getStats) return;
+        var p = pc.getStats();
+        if (!p || !p.then) return;
+        p.then(function (report) {
+          var bufferMs = null;
+          report.forEach(function (r) {
+            if (r.type === 'inbound-rtp' && (r.kind === 'audio' || r.mediaType === 'audio') && r.jitterBufferEmittedCount > 0) {
+              bufferMs = r.jitterBufferDelay / r.jitterBufferEmittedCount * 1000;
+            }
+          });
+          try { ch.send(JSON.stringify({ t: 'stats', bufferMs: bufferMs })); } catch (err) {}
+        }).catch(function () {});
+      };
+    };
     pc.ontrack = function (e) {
       var stream = e.streams && e.streams[0] ? e.streams[0] : new MediaStream([e.track]);
       // Pedir al navegador el mínimo búfer de reproducción (solo Chromium moderno lo respeta)
