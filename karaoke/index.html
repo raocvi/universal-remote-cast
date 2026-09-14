@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Karaoke · Universal Remote</title>
+<!--
+  Escenario de KARAOKE en el televisor (Universal Remote, 2026-09-13).
+  Se abre en el navegador del TV (o en Cast). Muestra un código; la app se conecta por
+  WebRTC (Wi‑Fi de casa): por un canal de datos manda qué vídeo de karaoke de YouTube
+  reproducir (embebido aquí, con la letra dentro del vídeo) y por audio llega la voz del
+  que canta, que el TV mezcla encima. Por internet solo va la señalización (voice-signal).
+  JavaScript ES5 a propósito: los navegadores de TV son viejos (Tizen, webOS).
+-->
+<style>
+  html,body{margin:0;height:100%;background:#05060a;color:#fff;font-family:-apple-system,Helvetica,Arial,sans-serif;overflow:hidden}
+  #player{position:absolute;left:0;top:0;width:100%;height:100%;background:#000}
+  #lobby{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:4vh 6vw;background:radial-gradient(circle at 50% 30%,#1a1030 0%,#05060a 70%)}
+  #lobby h1{font-size:5vh;font-weight:800;letter-spacing:.2vh;margin:0 0 1vh}
+  #lobby p{font-size:3vh;color:#9aa3b2;margin:0 0 2vh}
+  #code{font-size:20vh;font-weight:800;letter-spacing:2vh;margin:1vh 0 2vh;font-variant-numeric:tabular-nums}
+  #status{font-size:3.4vh;color:#c7ccd6;min-height:5vh}
+  .ok{color:#30d158}.bad{color:#ff453a}
+  #hud{position:absolute;left:0;right:0;bottom:0;padding:2vh 3vw 2.5vh;background:linear-gradient(180deg,rgba(0,0,0,0) 0%,rgba(0,0,0,.75) 60%);display:none}
+  #now{font-size:4vh;font-weight:800;text-shadow:0 2px 12px rgba(0,0,0,.8)}
+  #singer{font-size:3vh;color:#FA7AF8;font-weight:700;margin-top:.5vh}
+  #next{font-size:2.6vh;color:#c7ccd6;margin-top:1.2vh}
+  #next span{color:#57BEFD;font-weight:700}
+  #meterWrap{position:absolute;right:3vw;top:3vh;width:22vw;height:2.2vh;border-radius:2vh;background:rgba(255,255,255,.12);overflow:hidden;display:none}
+  #bar{height:100%;width:0;background:linear-gradient(90deg,#57BEFD,#D75FE4,#F64357);transition:width .08s}
+  #glow{position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 0 0 0 rgba(215,95,228,0);transition:box-shadow .15s}
+  #toast{position:absolute;left:50%;top:6vh;transform:translateX(-50%);background:rgba(20,20,28,.92);border:1px solid rgba(255,255,255,.12);border-radius:2vh;padding:1.6vh 3vw;font-size:3vh;display:none}
+  #codeMini{position:absolute;left:3vw;top:3vh;font-size:2.4vh;color:#6b7280;letter-spacing:.4vh;display:none}
+</style>
+</head>
+<body>
+<div id="player"></div>
+<div id="glow"></div>
+<div id="lobby">
+  <h1>🎤 KARAOKE</h1>
+  <p>En la app: Herramientas › Karaoke › teclea este código</p>
+  <div id="code">------</div>
+  <div id="status">Esperando al teléfono…</div>
+</div>
+<div id="hud"><div id="now"></div><div id="singer"></div><div id="next"></div></div>
+<div id="meterWrap"><div id="bar"></div></div>
+<div id="codeMini"></div>
+<div id="toast"></div>
+<audio id="out" autoplay playsinline></audio>
+<script>
+(function () {
+  var SIGNAL = 'https://qojtwgzpazwompyvtpjk.supabase.co/functions/v1/voice-signal';
+  var ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  var code = '';
+  for (var i = 0; i < 6; i++) code += ALPHABET.charAt(Math.floor(Math.random() * ALPHABET.length));
+  var $ = function (id) { return document.getElementById(id); };
+  $('code').textContent = code; $('codeMini').textContent = code;
+  var out = $('out'), lastId = 0, pc = null, ch = null, audioCtx = null, player = null, playerReady = false, pending = null;
+  var current = { title: '', singer: '' };
+
+  function status(t, cls) { $('status').textContent = t; $('status').className = cls || ''; }
+  function toast(t, ms) { var el = $('toast'); el.textContent = t; el.style.display = 'block'; clearTimeout(toast.h); toast.h = setTimeout(function () { el.style.display = 'none'; }, ms || 3000); }
+  function send(obj) { try { if (ch && ch.readyState === 'open') ch.send(JSON.stringify(obj)); } catch (e) {} }
+
+  // ── Señalización (solo para abrir la conexión) ──
+  function post(kind, payload) {
+    var x = new XMLHttpRequest(); x.open('POST', SIGNAL, true); x.setRequestHeader('Content-Type', 'application/json');
+    x.send(JSON.stringify({ code: code, to: 'phone', kind: kind, payload: payload }));
+  }
+  function poll() {
+    var x = new XMLHttpRequest();
+    x.open('GET', SIGNAL + '?code=' + code + '&to=tv&after=' + lastId, true);
+    x.onreadystatechange = function () {
+      if (x.readyState !== 4) return;
+      if (x.status === 200) { try { var msgs = JSON.parse(x.responseText).messages || []; for (var k = 0; k < msgs.length; k++) { lastId = msgs[k].id; handle(msgs[k].kind, msgs[k].payload); } } catch (e) {} }
+      setTimeout(poll, pc ? 2000 : 400);
+    };
+    x.send();
+  }
+  function handle(kind, payload) {
+    if (kind === 'offer') { start(payload); return; }
+    if (kind === 'ice' && pc) { try { pc.addIceCandidate(new RTCIceCandidate(payload)); } catch (e) {} return; }
+    if (kind === 'bye') { bye(); }
+  }
+  function bye() {
+    if (pc) { try { pc.close(); } catch (e) {} }
+    pc = null; ch = null;
+    if (player && playerReady) { try { player.stopVideo(); } catch (e) {} }
+    $('lobby').style.display = 'flex'; $('hud').style.display = 'none'; $('meterWrap').style.display = 'none'; $('codeMini').style.display = 'none';
+    status('El teléfono cerró la sesión. Recarga para otra.', 'bad');
+  }
+
+  // ── WebRTC: voz + canal de datos ──
+  function start(offer) {
+    if (!window.RTCPeerConnection) { status('Este navegador de TV no tiene WebRTC', 'bad'); post('bye', { reason: 'no_webrtc' }); return; }
+    status('Conectando con el teléfono…');
+    pc = new RTCPeerConnection({ iceServers: [] });
+    pc.onicecandidate = function (e) { if (e.candidate) post('ice', e.candidate.toJSON ? e.candidate.toJSON() : e.candidate); };
+    pc.oniceconnectionstatechange = function () {
+      var s = pc.iceConnectionState;
+      if (s === 'connected' || s === 'completed') { status('Conectado. Elige una canción en el teléfono.', 'ok'); }
+      else if (s === 'failed') status('Conexión perdida', 'bad');
+    };
+    pc.ondatachannel = function (e) {
+      ch = e.channel;
+      ch.onmessage = function (msg) { var m; try { m = JSON.parse(msg.data); } catch (err) { return; } onCommand(m); };
+    };
+    pc.ontrack = function (e) {
+      var stream = e.streams && e.streams[0] ? e.streams[0] : new MediaStream([e.track]);
+      try { if (e.receiver && 'playoutDelayHint' in e.receiver) e.receiver.playoutDelayHint = 0; } catch (err) {}
+      out.srcObject = stream;
+      var p = out.play(); if (p && p.catch) p.catch(function () { toast('Pulsa OK en el mando para activar el sonido', 6000); });
+      meter(stream);
+    };
+    pc.setRemoteDescription(new RTCSessionDescription(offer)).then(function () { return pc.createAnswer(); })
+      .then(function (answer) { return pc.setLocalDescription(answer).then(function () { post('answer', { type: answer.type, sdp: answer.sdp }); }); })
+      .catch(function (err) { status('Error WebRTC: ' + (err && err.message ? err.message : err), 'bad'); });
+  }
+
+  // ── Órdenes de la app ──
+  function onCommand(m) {
+    if (!m || !m.t) return;
+    if (m.t === 'stats?') { stats(); return; }
+    if (m.t === 'play') { current = { title: m.title || '', singer: m.singer || '' }; showStage(); load(m.videoId); return; }
+    if (m.t === 'pause') { if (playerReady) player.pauseVideo(); return; }
+    if (m.t === 'resume') { if (playerReady) player.playVideo(); return; }
+    if (m.t === 'stop') { if (playerReady) player.stopVideo(); $('now').textContent = ''; $('singer').textContent = ''; return; }
+    if (m.t === 'queue') { var n = m.next || []; $('next').innerHTML = n.length ? 'Siguen: ' + n.map(function (x) { return '<span>' + esc(x.singer ? x.singer + ' · ' : '') + esc(x.title) + '</span>'; }).join(' &nbsp;·&nbsp; ') : ''; return; }
+    if (m.t === 'volume') { if (playerReady) player.setVolume(Math.max(0, Math.min(100, Number(m.music) || 0))); return; }
+  }
+  function esc(s) { return String(s).replace(/[&<>]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; }); }
+  function showStage() {
+    $('lobby').style.display = 'none'; $('hud').style.display = 'block'; $('meterWrap').style.display = 'block'; $('codeMini').style.display = 'block';
+    $('now').textContent = current.title; $('singer').textContent = current.singer ? '🎤 ' + current.singer : '';
+  }
+  function stats() {
+    if (!pc || !pc.getStats) return;
+    var p = pc.getStats(); if (!p || !p.then) return;
+    p.then(function (report) {
+      var bufferMs = null;
+      report.forEach(function (r) { if (r.type === 'inbound-rtp' && (r.kind === 'audio' || r.mediaType === 'audio') && r.jitterBufferEmittedCount > 0) bufferMs = r.jitterBufferDelay / r.jitterBufferEmittedCount * 1000; });
+      send({ t: 'stats', bufferMs: bufferMs });
+    }).catch(function () {});
+  }
+
+  // ── Reproductor de YouTube (embebido; la letra va dentro del vídeo) ──
+  var tag = document.createElement('script'); tag.src = 'https://www.youtube.com/iframe_api'; document.head.appendChild(tag);
+  window.onYouTubeIframeAPIReady = function () {
+    player = new YT.Player('player', {
+      width: '100%', height: '100%', videoId: '',
+      playerVars: { autoplay: 1, controls: 0, rel: 0, modestbranding: 1, playsinline: 1, iv_load_policy: 3, fs: 0, disablekb: 1 },
+      events: {
+        onReady: function () { playerReady = true; if (pending) { load(pending); pending = null; } },
+        onStateChange: function (e) {
+          if (e.data === YT.PlayerState.ENDED) { send({ t: 'ended' }); }
+          send({ t: 'state', playing: e.data === YT.PlayerState.PLAYING, title: current.title });
+        },
+        onError: function (e) { send({ t: 'error', code: e.data }); toast('Este vídeo no se puede reproducir aquí. Elige otro en el teléfono.', 5000); },
+      },
+    });
+  };
+  function load(videoId) {
+    if (!playerReady) { pending = videoId; return; }
+    try { player.loadVideoById(videoId); player.playVideo(); } catch (e) {}
+    // El navegador del TV puede exigir un toque para sonar: si no arranca en 2 s, avisar
+    setTimeout(function () { try { if (player.getPlayerState() !== YT.PlayerState.PLAYING) toast('Pulsa OK en el mando para arrancar', 6000); } catch (e) {} }, 2500);
+  }
+
+  // ── Medidor de voz ──
+  function meter(stream) {
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+      audioCtx = new AC();
+      var src = audioCtx.createMediaStreamSource(stream), an = audioCtx.createAnalyser(); an.fftSize = 512; src.connect(an);
+      var buf = new Uint8Array(an.fftSize);
+      (function tick() {
+        an.getByteTimeDomainData(buf);
+        var peak = 0; for (var i = 0; i < buf.length; i++) { var v = Math.abs(buf[i] - 128) / 128; if (v > peak) peak = v; }
+        $('bar').style.width = Math.min(100, peak * 140) + '%';
+        $('glow').style.boxShadow = 'inset 0 0 ' + (peak * 22) + 'vh ' + (peak * 4) + 'vh rgba(215,95,228,' + Math.min(.7, peak * 1.2) + ')';
+        requestAnimationFrame(tick);
+      })();
+    } catch (e) {}
+  }
+
+  // OK del mando / toque: desbloquea audio y arranca el vídeo si estaba esperando
+  function unlock() { try { out.play(); if (audioCtx && audioCtx.resume) audioCtx.resume(); if (playerReady) player.playVideo(); } catch (e) {} }
+  document.addEventListener('keydown', unlock); document.addEventListener('click', unlock);
+
+  poll();
+})();
+</script>
+</body>
+</html>
