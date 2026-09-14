@@ -25,7 +25,7 @@
 </head>
 <body>
   <h1>Prueba de voz al TV</h1>
-  <p>Teclea el código que muestra el televisor. Después habla: te oirás por el TV. Cada 2 s se envía un clic de prueba para medir el retraso; deja el teléfono a menos de 2 m del TV con el volumen del TV a la mitad.</p>
+  <p>Teclea el código que muestra el televisor. Primero se miden 10 clics (unos 25 s) con el micrófono cerrado; después se abre y te oirás por el TV. Deja el teléfono a menos de 2 m del TV con el volumen del TV a la mitad.</p>
   <input id="code" maxlength="6" autocapitalize="characters" autocomplete="off" placeholder="CÓDIGO">
   <button id="go">Conectar y medir</button>
   <button id="stop" class="sec" style="display:none">Terminar</button>
@@ -77,7 +77,10 @@
     await ctx.resume();
     const src = ctx.createMediaStreamSource(mic);
     const dest = ctx.createMediaStreamDestination();   // lo que se manda al TV: micro + clics
-    src.connect(dest);
+    // Durante la medición el micrófono va SILENCIADO hacia el TV: si no, el TV suena, el
+    // micro lo vuelve a captar y se forma un bucle (eco repetido) que rompe la medida.
+    const micGain = ctx.createGain(); micGain.gain.value = 0;
+    src.connect(micGain); micGain.connect(dest);
 
     // Detector del clic que vuelve por el aire: filtro paso banda en 2 kHz + umbral
     const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2000; bp.Q.value = 12;
@@ -115,7 +118,10 @@
         osc.start(t); osc.stop(t + 0.03);
         armedAt = t;
       }
-      if (delays.length >= 10) log('Medición completa. Sigue hablando para juzgar la voz de oído.');
+      if (delays.length >= 10) {
+        micGain.gain.value = 1;
+        log('Medición completa. Micrófono ABIERTO: habla para juzgar de oído. Si se forma eco en bucle, baja el volumen del TV o aléjate.');
+      }
     };
 
     pc = new RTCPeerConnection({ iceServers: [] });
