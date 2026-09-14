@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prueba de voz · Universal Remote</title>
+<!--
+  Página del TELEVISOR para la prueba de voz por WebRTC (Universal Remote, 2026-09-13).
+  Se abre en el navegador del TV (o en Cast). Muestra un código; el teléfono abre
+  phone.html, teclea el código y manda su micrófono punto a punto por la Wi‑Fi de casa.
+  La voz NO pasa por internet ni por Cast: solo la señalización (tres mensajes) va por
+  la función voice-signal de Supabase.
+  JavaScript ES5 a propósito: los navegadores de TV son viejos (Tizen, webOS).
+-->
+<style>
+  html,body{margin:0;height:100%;background:#05060a;color:#fff;font-family:-apple-system,Helvetica,Arial,sans-serif;overflow:hidden}
+  #root{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:4vh 6vw}
+  h1{font-size:4vh;font-weight:600;letter-spacing:.3vh;color:#9aa3b2;margin:0 0 2vh}
+  #code{font-size:22vh;font-weight:800;letter-spacing:2vh;margin:1vh 0 3vh;font-variant-numeric:tabular-nums}
+  #status{font-size:4.2vh;color:#c7ccd6;min-height:6vh}
+  #meter{width:60vw;height:3vh;border-radius:2vh;background:#161a24;margin-top:4vh;overflow:hidden}
+  #bar{height:100%;width:0;background:linear-gradient(90deg,#57BEFD,#D75FE4,#F64357);transition:width .08s}
+  #hint{position:absolute;bottom:4vh;left:0;right:0;font-size:2.6vh;color:#6b7280}
+  .ok{color:#30d158}.bad{color:#ff453a}
+  #glow{position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 0 0 0 rgba(215,95,228,0);transition:box-shadow .15s}
+</style>
+</head>
+<body>
+<div id="glow"></div>
+<div id="root">
+  <h1>PRUEBA DE VOZ AL TV</h1>
+  <div id="code">------</div>
+  <div id="status">Abre en el teléfono: raocvi.github.io/universal-remote-cast/voice-test/phone.html</div>
+  <div id="meter"><div id="bar"></div></div>
+  <div id="hint">Pulsa OK en el mando si no se oye nada (el navegador pide un toque para sonar)</div>
+</div>
+<audio id="out" autoplay playsinline></audio>
+<script>
+(function () {
+  var SIGNAL = 'https://qojtwgzpazwompyvtpjk.supabase.co/functions/v1/voice-signal';
+  var ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  var code = '';
+  for (var i = 0; i < 6; i++) code += ALPHABET.charAt(Math.floor(Math.random() * ALPHABET.length));
+  document.getElementById('code').textContent = code;
+  var statusEl = document.getElementById('status');
+  var bar = document.getElementById('bar');
+  var glow = document.getElementById('glow');
+  var out = document.getElementById('out');
+  var lastId = 0, pc = null, audioCtx = null;
+
+  function status(t, cls) { statusEl.textContent = t; statusEl.className = cls || ''; }
+
+  function post(kind, payload) {
+    var x = new XMLHttpRequest();
+    x.open('POST', SIGNAL, true);
+    x.setRequestHeader('Content-Type', 'application/json');
+    x.send(JSON.stringify({ code: code, to: 'phone', kind: kind, payload: payload }));
+  }
+
+  function poll() {
+    var x = new XMLHttpRequest();
+    x.open('GET', SIGNAL + '?code=' + code + '&to=tv&after=' + lastId, true);
+    x.onreadystatechange = function () {
+      if (x.readyState !== 4) return;
+      if (x.status === 200) {
+        try {
+          var msgs = JSON.parse(x.responseText).messages || [];
+          for (var k = 0; k < msgs.length; k++) { lastId = msgs[k].id; handle(msgs[k].kind, msgs[k].payload); }
+        } catch (e) {}
+      }
+      setTimeout(poll, 400);
+    };
+    x.send();
+  }
+
+  function handle(kind, payload) {
+    if (kind === 'offer') { start(payload); return; }
+    if (kind === 'ice' && pc) { try { pc.addIceCandidate(new RTCIceCandidate(payload)); } catch (e) {} return; }
+    if (kind === 'bye') { status('El teléfono cerró la prueba. Recarga para otra.', 'bad'); if (pc) pc.close(); pc = null; }
+  }
+
+  function start(offer) {
+    if (!window.RTCPeerConnection) { status('Este navegador de TV no tiene WebRTC', 'bad'); post('bye', { reason: 'no_webrtc' }); return; }
+    status('Conectando con el teléfono…');
+    pc = new RTCPeerConnection({ iceServers: [] });   // solo red local: sin STUN ni TURN
+    pc.onicecandidate = function (e) { if (e.candidate) post('ice', e.candidate.toJSON ? e.candidate.toJSON() : e.candidate); };
+    pc.oniceconnectionstatechange = function () {
+      var s = pc.iceConnectionState;
+      if (s === 'connected' || s === 'completed') status('Conectado. Habla por el teléfono.', 'ok');
+      else if (s === 'failed' || s === 'disconnected') status('Conexión perdida (' + s + ')', 'bad');
+    };
+    pc.ontrack = function (e) {
+      var stream = e.streams && e.streams[0] ? e.streams[0] : new MediaStream([e.track]);
+      // Pedir al navegador el mínimo búfer de reproducción (solo Chromium moderno lo respeta)
+      try { if (e.receiver && 'playoutDelayHint' in e.receiver) e.receiver.playoutDelayHint = 0; } catch (err) {}
+      out.srcObject = stream;
+      var p = out.play(); if (p && p.catch) p.catch(function () { status('Pulsa OK en el mando para activar el sonido'); });
+      meter(stream);
+    };
+    pc.setRemoteDescription(new RTCSessionDescription(offer)).then(function () {
+      return pc.createAnswer();
+    }).then(function (answer) {
+      return pc.setLocalDescription(answer).then(function () { post('answer', { type: answer.type, sdp: answer.sdp }); });
+    }).catch(function (err) { status('Error WebRTC: ' + (err && err.message ? err.message : err), 'bad'); });
+  }
+
+  function meter(stream) {
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      audioCtx = new AC();
+      var src = audioCtx.createMediaStreamSource(stream);
+      var an = audioCtx.createAnalyser(); an.fftSize = 512;
+      src.connect(an);   // solo medir: el audio sale por el <audio>, no por aquí
+      var buf = new Uint8Array(an.fftSize);
+      (function tick() {
+        an.getByteTimeDomainData(buf);
+        var peak = 0;
+        for (var i = 0; i < buf.length; i++) { var v = Math.abs(buf[i] - 128) / 128; if (v > peak) peak = v; }
+        bar.style.width = Math.min(100, peak * 140) + '%';
+        glow.style.boxShadow = 'inset 0 0 ' + (peak * 30) + 'vh ' + (peak * 6) + 'vh rgba(215,95,228,' + Math.min(.9, peak * 1.5) + ')';
+        requestAnimationFrame(tick);
+      })();
+    } catch (e) {}
+  }
+
+  // Un toque/OK del mando desbloquea el audio en navegadores que lo exigen
+  function unlock() { try { out.play(); if (audioCtx && audioCtx.resume) audioCtx.resume(); } catch (e) {} }
+  document.addEventListener('keydown', unlock); document.addEventListener('click', unlock);
+
+  poll();
+})();
+</script>
+</body>
+</html>

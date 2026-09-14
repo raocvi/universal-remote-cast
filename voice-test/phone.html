@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Prueba de voz · teléfono</title>
+<!--
+  Página del TELÉFONO para la prueba de voz por WebRTC (Universal Remote, 2026-09-13).
+  Manda el micrófono al TV punto a punto por la Wi‑Fi y mide el retraso real: cada 2 s
+  mete un «clic» de 2 kHz en el audio que envía (no suena en el teléfono), el TV lo
+  reproduce por sus altavoces y el micrófono del teléfono lo oye. Lo que tarda en volver
+  es exactamente lo que un cantante percibiría. Se informa la mediana de 10 clics.
+-->
+<style>
+  body{margin:0;background:#05060a;color:#fff;font-family:-apple-system,Helvetica,Arial,sans-serif;padding:24px 20px 40px}
+  h1{font-size:22px;margin:8px 0 4px}
+  p{color:#9aa3b2;line-height:1.4;font-size:15px}
+  input{width:100%;box-sizing:border-box;font-size:34px;letter-spacing:8px;text-align:center;text-transform:uppercase;padding:12px;border-radius:14px;border:1px solid #2a2f3a;background:#0f121a;color:#fff;margin:12px 0}
+  button{width:100%;font-size:18px;font-weight:700;padding:16px;border-radius:14px;border:0;background:#0a84ff;color:#fff;margin-top:8px}
+  button.sec{background:#1c1f28;color:#c7ccd6}
+  #log{font-family:Menlo,monospace;font-size:13px;color:#c7ccd6;background:#0f121a;border-radius:12px;padding:12px;margin-top:16px;white-space:pre-wrap;min-height:120px}
+  #big{font-size:52px;font-weight:800;text-align:center;margin:16px 0 0;font-variant-numeric:tabular-nums}
+  .ok{color:#30d158}.mid{color:#ff9f0a}.bad{color:#ff453a}
+</style>
+</head>
+<body>
+  <h1>Prueba de voz al TV</h1>
+  <p>Teclea el código que muestra el televisor. Después habla: te oirás por el TV. Cada 2 s se envía un clic de prueba para medir el retraso; deja el teléfono a menos de 2 m del TV con el volumen del TV a la mitad.</p>
+  <input id="code" maxlength="6" autocapitalize="characters" autocomplete="off" placeholder="CÓDIGO">
+  <button id="go">Conectar y medir</button>
+  <button id="stop" class="sec" style="display:none">Terminar</button>
+  <div id="big">—</div>
+  <div id="log">Listo.</div>
+<script>
+(async function () {
+  const SIGNAL = 'https://qojtwgzpazwompyvtpjk.supabase.co/functions/v1/voice-signal';
+  const $ = id => document.getElementById(id);
+  const log = t => { $('log').textContent += '\n' + t; };
+  let pc = null, code = '', lastId = 0, polling = false, ctx = null, stopFlag = false;
+  const delays = [];
+
+  async function post(kind, payload) {
+    await fetch(SIGNAL, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code, to: 'tv', kind, payload }) });
+  }
+  async function poll() {
+    if (polling) return; polling = true;
+    while (!stopFlag) {
+      try {
+        const r = await fetch(`${SIGNAL}?code=${code}&to=phone&after=${lastId}`);
+        const j = await r.json();
+        for (const m of (j.messages || [])) { lastId = m.id; await handle(m.kind, m.payload); }
+      } catch (e) {}
+      await new Promise(r => setTimeout(r, 400));
+    }
+  }
+  async function handle(kind, payload) {
+    if (kind === 'answer' && pc) { await pc.setRemoteDescription(payload); log('Respuesta del TV recibida'); }
+    else if (kind === 'ice' && pc) { try { await pc.addIceCandidate(payload); } catch (e) {} }
+    else if (kind === 'bye') { log('El TV cerró: ' + JSON.stringify(payload)); }
+  }
+
+  function verdict(ms) {
+    const el = $('big'); el.textContent = Math.round(ms) + ' ms';
+    el.className = ms <= 120 ? 'ok' : ms <= 250 ? 'mid' : 'bad';
+  }
+
+  $('go').onclick = async () => {
+    code = $('code').value.trim().toUpperCase();
+    if (!/^[A-Z2-9]{6}$/.test(code)) { log('Código inválido'); return; }
+    $('go').disabled = true; $('stop').style.display = '';
+    let mic;
+    try {
+      // Sin cancelación de eco ni supresión de ruido: el clic de medida tiene que sobrevivir
+      mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }, video: false });
+    } catch (e) { log('Sin permiso de micrófono: ' + e.message); $('go').disabled = false; return; }
+    ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+    await ctx.resume();
+    const src = ctx.createMediaStreamSource(mic);
+    const dest = ctx.createMediaStreamDestination();   // lo que se manda al TV: micro + clics
+    src.connect(dest);
+
+    // Detector del clic que vuelve por el aire: filtro paso banda en 2 kHz + umbral
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2000; bp.Q.value = 12;
+    const an = ctx.createAnalyser(); an.fftSize = 1024;
+    src.connect(bp); bp.connect(an);
+    const buf = new Float32Array(an.fftSize);
+    let armedAt = null, noiseFloor = 0.002;
+    (function tick() {
+      if (stopFlag) return;
+      an.getFloatTimeDomainData(buf);
+      let peak = 0; for (let i = 0; i < buf.length; i++) { const v = Math.abs(buf[i]); if (v > peak) peak = v; }
+      if (armedAt === null) noiseFloor = noiseFloor * 0.98 + peak * 0.02;   // aprende el ruido de fondo
+      else if (peak > Math.max(0.02, noiseFloor * 6)) {
+        const ms = (ctx.currentTime - armedAt) * 1000;
+        if (ms > 15 && ms < 1500) {
+          delays.push(ms); armedAt = null;
+          const sorted = [...delays].sort((a, b) => a - b);
+          const med = sorted[Math.floor(sorted.length / 2)];
+          log(`clic ${delays.length}: ${ms.toFixed(0)} ms · mediana ${med.toFixed(0)} ms`);
+          verdict(med);
+        }
+      } else if (ctx.currentTime - armedAt > 1.6) { armedAt = null; log('clic sin respuesta (¿volumen del TV bajo o lejos?)'); }
+      requestAnimationFrame(tick);
+    })();
+
+    // Emisor del clic: 30 ms de 2 kHz dentro del stream enviado (no suena en el teléfono)
+    const clickEvery = async () => {
+      while (!stopFlag && delays.length < 10) {
+        await new Promise(r => setTimeout(r, 2000));
+        if (armedAt !== null || !pc || pc.iceConnectionState !== 'connected' && pc.iceConnectionState !== 'completed') continue;
+        const osc = ctx.createOscillator(); osc.type = 'square'; osc.frequency.value = 2000;
+        const g = ctx.createGain(); g.gain.value = 0.9;
+        osc.connect(g); g.connect(dest);
+        const t = ctx.currentTime + 0.02;
+        osc.start(t); osc.stop(t + 0.03);
+        armedAt = t;
+      }
+      if (delays.length >= 10) log('Medición completa. Sigue hablando para juzgar la voz de oído.');
+    };
+
+    pc = new RTCPeerConnection({ iceServers: [] });
+    pc.onicecandidate = e => { if (e.candidate) post('ice', e.candidate.toJSON()); };
+    pc.oniceconnectionstatechange = () => {
+      log('estado: ' + pc.iceConnectionState);
+      if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') clickEvery();
+    };
+    for (const track of dest.stream.getAudioTracks()) pc.addTrack(track, dest.stream);
+    const offer = await pc.createOffer({ offerToReceiveAudio: false, offerToReceiveVideo: false });
+    // Opus con paquetes de 10 ms y sin FEC: menos búfer, menos retraso
+    offer.sdp = offer.sdp.replace(/a=fmtp:(\d+) minptime=10;useinbandfec=1/g, 'a=fmtp:$1 minptime=10;useinbandfec=0;ptime=10;maxptime=20');
+    await pc.setLocalDescription(offer);
+    await post('offer', { type: offer.type, sdp: offer.sdp });
+    log('Oferta enviada al TV. Esperando…');
+    poll();
+
+    // Estadísticas de red cada 3 s: la parte que no es del TV
+    setInterval(async () => {
+      if (!pc || stopFlag) return;
+      const st = await pc.getStats();
+      st.forEach(r => { if (r.type === 'candidate-pair' && r.state === 'succeeded' && r.currentRoundTripTime !== undefined) log(`red ida y vuelta: ${(r.currentRoundTripTime * 1000).toFixed(0)} ms`); });
+    }, 3000);
+  };
+
+  $('stop').onclick = async () => { stopFlag = true; try { await post('bye', { reason: 'user' }); } catch (e) {} if (pc) pc.close(); log('Terminado. Mediana final: ' + (delays.length ? Math.round([...delays].sort((a,b)=>a-b)[Math.floor(delays.length/2)]) + ' ms' : 'sin datos')); };
+})();
+</script>
+</body>
+</html>
