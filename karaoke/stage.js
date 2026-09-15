@@ -73,8 +73,12 @@
     };
     pc.ontrack = function (e) {
       var stream = e.streams && e.streams[0] ? e.streams[0] : new MediaStream([e.track]);
-      try { if (e.receiver && 'playoutDelayHint' in e.receiver) e.receiver.playoutDelayHint = 0.03; } catch (err) {}
-      try { if (e.receiver && 'jitterBufferTarget' in e.receiver) e.receiver.jitterBufferTarget = 30; } catch (err) {}
+      var rcv = e.receiver;
+      function tighten() {
+        try { if (rcv && 'playoutDelayHint' in rcv) rcv.playoutDelayHint = 0; } catch (err) {}
+        try { if (rcv && 'jitterBufferTarget' in rcv) rcv.jitterBufferTarget = 20; } catch (err) {}
+      }
+      tighten(); setTimeout(tighten, 2000); setTimeout(tighten, 6000);   // algunos motores solo lo aceptan ya conectados
       mix(pid, stream);
     };
     pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: offer.sdp })).then(function () { return pc.createAnswer(); })
@@ -107,7 +111,7 @@
   //    silenciado hasta un toque). WebAudio solo mide el nivel para el medidor.
   function ctx() {
     if (audioCtx) return audioCtx;
-    try { var AC = window.AudioContext || window.webkitAudioContext; audioCtx = AC ? new AC() : null; } catch (e) { audioCtx = null; }
+    try { var AC = window.AudioContext || window.webkitAudioContext; audioCtx = AC ? new AC({ latencyHint: 0 }) : null; } catch (e) { audioCtx = null; }
     if (audioCtx) startMeter();
     return audioCtx;
   }
