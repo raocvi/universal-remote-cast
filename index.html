@@ -601,6 +601,9 @@
     f.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;border:0;background:#000;z-index:1000';
     document.body.appendChild(f);
     if (document.getElementById('welcome').className.indexOf('playing') < 0) dismissWelcome();
+    // El OK del mando llega a esta página, no al marco: se reenvía para que el escenario
+    // pueda arrancar sonido/vídeo si el navegador se lo exige.
+    document.addEventListener('keydown', function () { try { f.contentWindow.postMessage({ t: 'unlock' }, '*'); } catch (e) {} });
   }
   if (CAST) startCast(); else poll();
 })();

@@ -145,17 +145,18 @@
   function sendTo(pid, obj) { var p = peers[pid]; try { if (p && p.ch && p.ch.readyState === 'open') p.ch.send(JSON.stringify(obj)); } catch (e) {} }
   function broadcast(obj) { for (var k in peers) sendTo(k, obj); }
 
-  // ── Voz: cada teléfono se mezcla por WebAudio (latencia mínima); un <audio> mudo por
-  //    stream para que Chromium lo alimente. Si WebAudio no existe, el <audio> suena solo.
+  // ── Voz: cada teléfono suena por su propio <audio> (es lo que funcionó en las pruebas;
+  //    dentro del receptor de Cast nadie toca la pantalla, y un grafo WebAudio nacería
+  //    silenciado hasta un toque). WebAudio solo mide el nivel para el medidor.
   function ctx() {
     if (audioCtx) return audioCtx;
-    try { var AC = window.AudioContext || window.webkitAudioContext; audioCtx = AC ? new AC({ latencyHint: 'interactive' }) : null; } catch (e) { audioCtx = null; }
+    try { var AC = window.AudioContext || window.webkitAudioContext; audioCtx = AC ? new AC() : null; } catch (e) { audioCtx = null; }
     if (audioCtx) startMeter();
     return audioCtx;
   }
   var analyser = null;
   function startMeter() {
-    analyser = audioCtx.createAnalyser(); analyser.fftSize = 512; analyser.connect(audioCtx.destination);
+    analyser = audioCtx.createAnalyser(); analyser.fftSize = 512;   // solo medir: NO se conecta a la salida
     var buf = new Uint8Array(analyser.fftSize);
     (function tick() {
       analyser.getByteTimeDomainData(buf);
@@ -168,8 +169,9 @@
   function mix(pid, stream) {
     var p = peers[pid]; if (!p) return;
     var el = document.createElement('audio'); el.autoplay = true; el.setAttribute('playsinline', ''); el.srcObject = stream; document.body.appendChild(el); p.el = el;
+    el.muted = false; el.volume = 1;
     var c = ctx();
-    if (c) { try { p.src = c.createMediaStreamSource(stream); p.src.connect(analyser); el.muted = true; } catch (e) { el.muted = false; } }
+    if (c) { try { p.src = c.createMediaStreamSource(stream); p.src.connect(analyser); } catch (e) {} }
     var pr = el.play(); if (pr && pr.catch) pr.catch(function () { toast('Pulsa OK en el mando para activar el sonido', 6000); });
   }
 
@@ -253,6 +255,9 @@
     try { if (playerReady && queue.now) player.playVideo(); } catch (e) {}
   }
   document.addEventListener('keydown', unlock); document.addEventListener('click', unlock);
+  window.addEventListener('message', function (e) { if (e && e.data && e.data.t === 'unlock') unlock(); });
+  // Reintento silencioso: si algún <audio> quedó parado, se relanza cada pocos segundos
+  setInterval(function () { for (var k in peers) { try { var el = peers[k].el; if (el && el.paused) el.play(); } catch (e) {} } }, 3000);
 
   poll();
 })();
