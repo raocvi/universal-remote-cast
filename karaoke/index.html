@@ -128,7 +128,17 @@
       mix(pid, stream);
     };
     pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: offer.sdp })).then(function () { return pc.createAnswer(); })
-      .then(function (answer) { return pc.setLocalDescription(answer).then(function () { post('answer', { peer: pid, type: answer.type, sdp: answer.sdp }); }); })
+      .then(function (answer) {
+        // Paquetes de 20 ms (en vez de 10) y sin FEC: llegan más regulares por Wi‑Fi y el búfer
+        // de recepción del TV baja (con 10 ms se quedaba en ~120 ms). Se pide en la respuesta.
+        var sdp = String(answer.sdp).replace(/a=fmtp:(\d+) ([^
+]*)/g, function (m, pt, params) {
+          if (!/minptime/.test(params)) return m;
+          return 'a=fmtp:' + pt + ' minptime=20;useinbandfec=0;ptime=20;maxptime=40';
+        });
+        var a2 = { type: answer.type, sdp: sdp };
+        return pc.setLocalDescription(new RTCSessionDescription(a2)).then(function () { post('answer', { peer: pid, type: 'answer', sdp: sdp }); });
+      })
       .catch(function (err) { status('Error WebRTC: ' + (err && err.message ? err.message : err), 'bad'); drop(pid); });
   }
   function drop(pid) {
