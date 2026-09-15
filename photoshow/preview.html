@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Momentos en el TV · Estudio de previsualización</title>
+  <style>
+    :root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #08090c; color: #fff; }
+    .tools { position: fixed; z-index: 2147483100; top: 20px; left: 20px; display: flex;
+      align-items: center; flex-wrap: wrap; gap: 10px; max-width: calc(100vw - 40px);
+      padding: 12px 14px; background: rgba(14,15,20,.95); border: 1px solid #474852;
+      border-radius: 12px; box-shadow: 0 8px 36px #0005; }
+    .field { display: flex; flex-direction: column; gap: 4px; }
+    label { font-size: 11px; letter-spacing: .12em; color: #c5c4cc; text-transform: uppercase; }
+    select, button { font: inherit; font-size: 14px; min-height: 44px; border-radius: 6px;
+      border: 1px solid #4d4e59; background: #24252e; color: #fff; padding: 8px 12px; cursor: pointer; }
+    select { min-width: 130px; }
+    button:hover, select:hover { background: #353641; }
+    button:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid #dfc097; outline-offset: 4px; }
+    .primary { background: #eee5d6; border-color: #eee5d6; color: #1c1b18; }
+    .primary:hover { background: #fff8ed; }
+    .actions { display: flex; gap: 8px; padding-top: 18px; }
+    .readout { min-width: 85px; padding: 17px 5px 0; font-size: 12px; color: #d7d5dc; }
+    .hint { position: fixed; z-index: 2147483100; bottom: 23px; left: 24px;
+      padding: 9px 13px; background: #111219eF; border: 1px solid #42434d;
+      color: #e1dde6; font-size: 12px; border-radius: 6px; }
+    .show-tools { position: fixed; z-index: 2147483100; top: 20px; left: 20px;
+      opacity: 0; transition: opacity .2s ease; }
+    .show-tools:hover, .show-tools:focus-visible { opacity: 1; }
+    @media (prefers-reduced-motion: reduce) { .show-tools { transition: none; } }
+    [hidden] { display: none !important; }
+    @media (max-width: 720px) {
+      .tools { top: 8px; left: 8px; max-width: calc(100vw - 16px); gap: 6px; padding: 8px; }
+      select { min-width: 105px; } .actions { padding-top: 0; flex-wrap: wrap; }
+      .readout { padding-top: 0; } .hint { bottom: 12px; left: 12px; font-size: 11px; }
+    }
+  </style>
+</head>
+<body>
+  <main id="stage" aria-label="Vista previa de Momentos"></main>
+  <div class="tools" id="tools" role="toolbar" aria-label="Controles de previsualización">
+    <div class="field"><label for="template">Dirección de arte</label>
+      <select id="template"><option value="editorial">Editorial</option><option value="neon">Neon</option>
+        <option value="film">Film</option><option value="memories">Memories</option></select></div>
+    <div class="field"><label for="music">Banda sonora</label>
+      <select id="music"><option value="calm">Calm · piano</option><option value="warm">Warm · cuerdas</option>
+        <option value="night">Night · pads</option><option value="none">Sin música</option></select></div>
+    <div class="actions"><button class="primary" id="play">Reproducir</button>
+      <button id="restart">Reiniciar</button><button id="fullscreen">Pantalla completa</button>
+      <button id="hide" title="Ocultar controles (H)">Ocultar</button></div>
+    <div class="readout" id="readout" role="status" aria-live="polite">0 / 10 fotos</div>
+  </div>
+  <button class="show-tools" id="show" title="Mostrar controles (H)" hidden>Mostrar controles</button>
+  <div class="hint" id="hint">Fotos sintéticas · Espacio: reproducir / pausar · H: ocultar controles · Audio al pulsar Reproducir</div>
+  <script src="stage.js"></script>
+  <script>
+    (function () {
+      'use strict';
+      var show = window.UrpPhotoShow;
+      var stage = document.getElementById('stage');
+      var template = document.getElementById('template'), music = document.getElementById('music');
+      var play = document.getElementById('play'), readout = document.getElementById('readout');
+      var tools = document.getElementById('tools'), reveal = document.getElementById('show');
+      var hint = document.getElementById('hint'), playing = false, session = 0, timers = [];
+      var colors = [
+        ['#f0b5a4', '#af503d', '#fce4b9'], ['#87b8b0', '#244f55', '#f0d19d'],
+        ['#edb874', '#b6534b', '#f7dac1'], ['#a8a7d5', '#434170', '#f7b7b7'],
+        ['#ced4a8', '#637754', '#fff1b5'], ['#eac3aa', '#8e604c', '#fff1da'],
+        ['#93c3da', '#325e86', '#f7e6c9'], ['#dd9ab5', '#80436d', '#f9d4b1'],
+        ['#dfce92', '#898054', '#fff4cc'], ['#b8bad5', '#666780', '#f2e2d3']
+      ];
+      function synthetic(index) {
+        // Paisajes abstractos originales: papel, sol, arcos y horizonte.
+        // Tres proporciones ejercitan recortes verticales y panorámicos reales.
+        var sizes = [[1600, 1067], [1080, 1440], [1920, 960]];
+        var size = sizes[index % 3], el = document.createElement('canvas');
+        el.width = size[0]; el.height = size[1];
+        var c = el.getContext('2d'), w = el.width, h = el.height, pal = colors[index];
+        var gradient = c.createLinearGradient(0, 0, w, h);
+        gradient.addColorStop(0, pal[0]); gradient.addColorStop(1, pal[1]);
+        c.fillStyle = gradient; c.fillRect(0, 0, w, h);
+        c.fillStyle = pal[2]; c.beginPath(); c.arc(w * .7, h * .27, Math.min(w, h) * .145, 0, Math.PI * 2); c.fill();
+        c.globalAlpha = .22; c.fillStyle = pal[2];
+        for (var i = 0; i < 5; i++) {
+          c.beginPath(); c.moveTo(0, h * (.55 + i * .08));
+          c.bezierCurveTo(w * .3, h * (.25 + i * .1), w * .65, h * (.98 - i * .015), w, h * (.48 + i * .09));
+          c.lineTo(w, h); c.lineTo(0, h); c.fill();
+        }
+        c.globalAlpha = .74; c.fillStyle = pal[1];
+        c.beginPath(); c.moveTo(w * .13, h);
+        c.lineTo(w * .13, h * .47); c.bezierCurveTo(w * .13, h * .19, w * .44, h * .19, w * .44, h * .47);
+        c.lineTo(w * .44, h); c.fill();
+        c.globalAlpha = 1; c.fillStyle = pal[2];
+        c.font = '400 ' + Math.round(Math.min(w, h) * .29) + 'px Georgia';
+        c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillText(('0' + (index + 1)).slice(-2), w * .5, h * .56);
+        c.strokeStyle = pal[2]; c.lineWidth = 2; c.globalAlpha = .5;
+        c.strokeRect(w * .055, h * .065, w * .89, h * .87);
+        c.globalAlpha = .82; c.font = '500 ' + Math.round(Math.min(w, h) * .022) + 'px Arial';
+        c.fillText('ESTUDIOS DE LUZ  /  ' + ('0' + (index + 1)).slice(-2), w * .5, h * .865);
+        return { id: 'synthetic-' + index, src: el.toDataURL('image/jpeg', .88), w: w, h: h };
+      }
+      function mount() {
+        timers.forEach(clearTimeout); timers = []; session++;
+        var current = session;
+        show.mount(stage, { template: template.value, music: music.value,
+          title: 'Lo que se queda', subtitle: 'Diez instantes. Infinitas formas de volver.', total: 10,
+          onProgress: function (index, total) { readout.textContent = index ? 'Momento ' + index + ' / ' + total : total + ' / 10 fotos'; },
+          onEnd: function () { playing = false; play.textContent = 'Volver a ver'; }
+        });
+        playing = false; play.textContent = 'Reproducir';
+        // La recepción escalonada deja ver el estado «3 de 10» sin bloquear la UI.
+        for (var i = 0; i < 10; i++) {
+          (function (index) {
+            timers.push(setTimeout(function () {
+              if (session === current) show.addPhoto(synthetic(index));
+            }, 650 + index * 460));
+          }(i));
+        }
+      }
+      function togglePlay() {
+        playing = !playing;
+        if (playing) show.play(); else show.pause();
+        play.textContent = playing ? 'Pausar' : 'Reproducir';
+      }
+      function hideTools(hide) {
+        tools.hidden = hide; hint.hidden = hide; reveal.hidden = !hide;
+      }
+      play.addEventListener('click', togglePlay);
+      template.addEventListener('change', function () { show.setTemplate(template.value); });
+      music.addEventListener('change', function () { show.setMusic(music.value); });
+      document.getElementById('restart').addEventListener('click', mount);
+      document.getElementById('hide').addEventListener('click', function () { hideTools(true); });
+      reveal.addEventListener('click', function () { hideTools(false); });
+      document.getElementById('fullscreen').addEventListener('click', function () {
+        var action;
+        if (document.fullscreenElement) action = document.exitFullscreen();
+        else if (document.documentElement.requestFullscreen) action = document.documentElement.requestFullscreen();
+        if (action && action.catch) action.catch(function () { hint.textContent = 'Pantalla completa no disponible; puedes usar F11.'; });
+      });
+      document.addEventListener('keydown', function (event) {
+        if (/SELECT|INPUT|TEXTAREA|BUTTON/.test(event.target.tagName) || event.ctrlKey || event.metaKey || event.altKey || event.repeat) return;
+        if (event.code === 'Space') { event.preventDefault(); togglePlay(); }
+        if (event.key.toLowerCase() === 'h') hideTools(!tools.hidden);
+      });
+      globalThis.addEventListener('pagehide', function () { timers.forEach(clearTimeout); show.unmount(); });
+      globalThis.addEventListener('pageshow', function (event) { if (event.persisted) mount(); });
+      mount();
+    }());
+  </script>
+</body>
+</html>

@@ -2,7 +2,7 @@
 // Se monta en la página que toque: el receptor de Cast o index.html en el navegador del TV.
 // Protocolo con la app (canal de datos):
 //   teléfono → TV: {t:'hello'} · {t:'photo', id, i, n, d} (trozos base64 JPEG) ·
-//                  {t:'show', template, title, subtitle, music} · {t:'play'} · {t:'pause'} ·
+//                  {t:'show', template, title, subtitle, music, lang} · {t:'play'} · {t:'pause'} ·
 //                  {t:'template', v} · {t:'music', v} · {t:'clear'}
 //   TV → teléfono: {t:'ready'} · {t:'photos', n} · {t:'progress', i, n} · {t:'end'}
 (function () {
@@ -33,12 +33,13 @@
             link.broadcast({ t: 'photos', n: photos });
             return;
           }
-          if (m.t === 'show') { if (m.template) show.setTemplate(m.template); if (m.music) show.setMusic(m.music); if (typeof show.setTitle === 'function') show.setTitle(m.title || '', m.subtitle || ''); show.play(); return; }
+          if (m.t === 'show') { if (m.lang) show.setLang(m.lang); if (m.template) show.setTemplate(m.template); if (m.music) show.setMusic(m.music); show.setTitle(m.title || '', m.subtitle || ''); show.play(); return; }
+          if (m.t === 'hello') { if (m.lang) show.setLang(m.lang); return; }
           if (m.t === 'play') { show.play(); return; }
           if (m.t === 'pause') { show.pause(); return; }
           if (m.t === 'template') { show.setTemplate(m.v); return; }
           if (m.t === 'music') { show.setMusic(m.v); return; }
-          if (m.t === 'clear') { if (typeof show.clear === 'function') show.clear(); photos = 0; return; }
+          if (m.t === 'clear') { show.clear(); photos = 0; return; }
         },
       });
       api.link = link; api.show = show; api.mounted = true;
