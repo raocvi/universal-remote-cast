@@ -601,6 +601,16 @@
     f.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;border:0;background:#000;z-index:1000';
     document.body.appendChild(f);
     if (document.getElementById('welcome').className.indexOf('playing') < 0) dismissWelcome();
+    // Diagnóstico (2026-09-14): en el Samsung el marco no suena; ¿suena la página principal?
+    // Tres pitidos desde aquí al abrir el escenario. Si se oyen, el escenario debe vivir aquí.
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) {
+        var c = new AC(); var t0 = c.currentTime;
+        for (var i = 0; i < 3; i++) { var o = c.createOscillator(), g = c.createGain(); o.frequency.value = 660 + i * 220; g.gain.value = 0.25; o.connect(g); g.connect(c.destination); o.start(t0 + i * 0.35); o.stop(t0 + i * 0.35 + 0.2); }
+        if (c.resume) c.resume();
+      }
+    } catch (e) {}
     // El OK del mando llega a esta página, no al marco: se reenvía para que el escenario
     // pueda arrancar sonido/vídeo si el navegador se lo exige.
     document.addEventListener('keydown', function () { try { f.contentWindow.postMessage({ t: 'unlock' }, '*'); } catch (e) {} });
