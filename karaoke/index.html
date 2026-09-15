@@ -178,8 +178,20 @@
   var inCast = (function () { try { return window.parent !== window; } catch (e) { return true; } })();
   var webOut = inCast;
   var lastBuf = null;
+  // Pitido de diagnóstico generado en el TV: ¿este motor emite audio del escenario?
+  function beep() {
+    var c = ctx(); if (!c) return;
+    try {
+      var o = c.createOscillator(), g = c.createGain();
+      o.type = 'sine'; o.frequency.value = 880; g.gain.value = 0.25;
+      o.connect(g); g.connect(c.destination);
+      var t0 = c.currentTime; o.start(t0); o.stop(t0 + 0.25);
+      var o2 = c.createOscillator(); o2.frequency.value = 1320; o2.connect(g); o2.start(t0 + 0.3); o2.stop(t0 + 0.55);
+    } catch (e) {}
+  }
   function mix(pid, stream) {
     var p = peers[pid]; if (!p) return;
+    beep();
     var el = document.createElement('audio'); el.autoplay = true; el.setAttribute('playsinline', ''); el.srcObject = stream; document.body.appendChild(el); p.el = el;
     el.muted = false; el.volume = 1;
     var c = ctx();
