@@ -588,32 +588,23 @@
     opts.disableIdleTimeout = true;   // el espejo no reproduce «media»: sin esto el receptor se cierra solo
     ctx.start(opts);
   }
-  // Karaoke dentro del receptor: la página del escenario (vídeo de YouTube + voz por WebRTC)
-  // va en un marco a pantalla completa. Con url vacía se quita y vuelve el espejo.
+  // Karaoke dentro del receptor: el escenario (karaoke/stage.js, misma página que usa el
+  // navegador del TV) se monta EN ESTA página, no en un marco: en el Samsung el receptor
+  // de Cast no emite el audio de un iframe pero sí el propio (comprobado con pitidos,
+  // 2026-09-14). Con url vacía se desmonta y vuelve el espejo.
   function karaoke(url) {
-    var old = document.getElementById('kframe');
-    if (old) old.parentNode.removeChild(old);
-    if (!url) return;
-    var f = document.createElement('iframe');
-    f.id = 'kframe';
-    f.src = url;
-    f.setAttribute('allow', 'autoplay; encrypted-media; fullscreen');
-    f.style.cssText = 'position:fixed;left:0;top:0;width:100vw;height:100vh;border:0;background:#000;z-index:1000';
-    document.body.appendChild(f);
+    var api = window.UrpKaraokeStage;
+    if (!url) { if (api && api.mounted) api.unmount(); return; }
+    var m = /[?&]code=([A-Za-z0-9]{6})/.exec(url);
+    var code = m ? m[1].toUpperCase() : '';
     if (document.getElementById('welcome').className.indexOf('playing') < 0) dismissWelcome();
-    // Diagnóstico (2026-09-14): en el Samsung el marco no suena; ¿suena la página principal?
-    // Tres pitidos desde aquí al abrir el escenario. Si se oyen, el escenario debe vivir aquí.
-    try {
-      var AC = window.AudioContext || window.webkitAudioContext;
-      if (AC) {
-        var c = new AC(); var t0 = c.currentTime;
-        for (var i = 0; i < 3; i++) { var o = c.createOscillator(), g = c.createGain(); o.frequency.value = 660 + i * 220; g.gain.value = 0.25; o.connect(g); g.connect(c.destination); o.start(t0 + i * 0.35); o.stop(t0 + i * 0.35 + 0.2); }
-        if (c.resume) c.resume();
-      }
-    } catch (e) {}
-    // El OK del mando llega a esta página, no al marco: se reenvía para que el escenario
-    // pueda arrancar sonido/vídeo si el navegador se lo exige.
-    document.addEventListener('keydown', function () { try { f.contentWindow.postMessage({ t: 'unlock' }, '*'); } catch (e) {} });
+    function mount() { try { window.UrpKaraokeStage.mount(document.body, { code: code }); } catch (e) { report('karaoke-mount', { x: String(e && e.message || e) }); } }
+    if (api) { mount(); return; }
+    var sc = document.createElement('script');
+    sc.src = 'https://raocvi.github.io/universal-remote-cast/karaoke/stage.js?v=' + Date.now();
+    sc.onload = mount;
+    sc.onerror = function () { report('karaoke-script', {}); };
+    document.head.appendChild(sc);
   }
   if (CAST) startCast(); else poll();
 })();
