@@ -131,8 +131,7 @@
       .then(function (answer) {
         // Paquetes de 20 ms (en vez de 10) y sin FEC: llegan más regulares por Wi‑Fi y el búfer
         // de recepción del TV baja (con 10 ms se quedaba en ~120 ms). Se pide en la respuesta.
-        var sdp = String(answer.sdp).replace(/a=fmtp:(\d+) ([^
-]*)/g, function (m, pt, params) {
+        var sdp = String(answer.sdp).replace(/a=fmtp:(\d+) ([^\r\n]*)/g, function (m, pt, params) {
           if (!/minptime/.test(params)) return m;
           return 'a=fmtp:' + pt + ' minptime=20;useinbandfec=0;ptime=20;maxptime=40';
         });
