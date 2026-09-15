@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Momentos · Universal Remote</title>
+<!-- «Momentos en el TV» en el navegador del TV (sin Cast). La app pasa ?code=XXXXXX. -->
+<style>html,body{margin:0;height:100%;background:#05060a}</style>
+</head>
+<body>
+<script src="app.js"></script>
+<script>
+(function () {
+  var m = /[?&]code=([A-Za-z0-9]{6})/.exec(location.search);
+  window.UrpStagePage.mount(document.body, { code: m ? m[1].toUpperCase() : '', base: location.href.replace(/[^\/]*$/, '') });
+})();
+</script>
+</body>
+</html>

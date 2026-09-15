@@ -572,6 +572,7 @@
       if (typeof m === 'string') { try { m = JSON.parse(m); } catch (e) { return; } }
       if (m.t === 's') { render(m.p || {}); return; }
       if (m.t === 'k') { karaoke(m.url || ''); return; }
+      if (m.t === 'page') { stagePage(m.script || '', m.code || ''); return; }
       if (m.t !== 'f') return;
       if (m.id < fid) return;
       if (m.id !== fid) { fid = m.id; parts = new Array(m.n); got = 0; }
@@ -587,6 +588,26 @@
     var opts = new cast.framework.CastReceiverOptions();
     opts.disableIdleTimeout = true;   // el espejo no reproduce «media»: sin esto el receptor se cierra solo
     ctx.start(opts);
+  }
+  // Página de escenario genérica dentro del receptor (p. ej. «Momentos»: photoshow/app.js).
+  // El guion expone window.UrpStagePage.mount(container, {code, base}); con script vacío se
+  // desmonta y vuelve el espejo. Misma razón que el karaoke: en Samsung un iframe no suena.
+  var stageScript = '';
+  function stagePage(script, code) {
+    var api = window.UrpStagePage;
+    if (!script) { if (api && api.mounted) api.unmount(); return; }
+    if (script.indexOf('https://raocvi.github.io/') !== 0) return;   // solo nuestras páginas
+    if (document.getElementById('welcome').className.indexOf('playing') < 0) dismissWelcome();
+    var base = script.replace(/[^/]*$/, '');
+    function mount() { try { window.UrpStagePage.mount(document.body, { code: code, base: base }); } catch (e) { report('page-mount', { x: String(e && e.message || e) }); } }
+    if (api && stageScript === script) { mount(); return; }
+    if (api && api.mounted) { try { api.unmount(); } catch (e) {} }
+    stageScript = script;
+    var sc = document.createElement('script');
+    sc.src = script + '?v=' + Date.now();
+    sc.onload = mount;
+    sc.onerror = function () { report('page-script', { s: script }); };
+    document.head.appendChild(sc);
   }
   // Karaoke dentro del receptor: el escenario (karaoke/stage.js, misma página que usa el
   // navegador del TV) se monta EN ESTA página, no en un marco: en el Samsung el receptor
