@@ -123,8 +123,8 @@
     };
     pc.ontrack = function (e) {
       var stream = e.streams && e.streams[0] ? e.streams[0] : new MediaStream([e.track]);
-      try { if (e.receiver && 'playoutDelayHint' in e.receiver) e.receiver.playoutDelayHint = 0; } catch (err) {}
-      try { if (e.receiver && 'jitterBufferTarget' in e.receiver) e.receiver.jitterBufferTarget = 0; } catch (err) {}
+      try { if (e.receiver && 'playoutDelayHint' in e.receiver) e.receiver.playoutDelayHint = 0.03; } catch (err) {}
+      try { if (e.receiver && 'jitterBufferTarget' in e.receiver) e.receiver.jitterBufferTarget = 30; } catch (err) {}
       mix(pid, stream);
     };
     pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: offer.sdp })).then(function () { return pc.createAnswer(); })
@@ -164,7 +164,11 @@
       $('bar').style.width = Math.min(100, peak * 140) + '%';
     }, 80);
   }
-  var webOut = false;   // plan B: la voz por WebAudio (si el <audio> no arranca en este motor)
+  // Dentro del receptor de Cast (marco), el <audio> «reproduce» pero no suena en Samsung: la
+  // salida va por WebAudio desde el principio. En el navegador del TV, el <audio> funciona.
+  var inCast = (function () { try { return window.parent !== window; } catch (e) { return true; } })();
+  var webOut = inCast;
+  var lastBuf = null;
   function mix(pid, stream) {
     var p = peers[pid]; if (!p) return;
     var el = document.createElement('audio'); el.autoplay = true; el.setAttribute('playsinline', ''); el.srcObject = stream; document.body.appendChild(el); p.el = el;
@@ -185,7 +189,8 @@
   setInterval(function () {
     var parts = [];
     for (var k in peers) { var el = peers[k].el; if (el) parts.push((el.paused ? 'audio parado' : 'audio ok') + (el.muted ? ' (mudo)' : '')); }
-    if (audioCtx) parts.push('ctx ' + audioCtx.state + (webOut ? ' →salida' : ''));
+    if (audioCtx) parts.push('ctx ' + audioCtx.state + (webOut ? ' →salida' : '') + (audioCtx.outputLatency ? ' out ' + Math.round(audioCtx.outputLatency * 1000) + 'ms' : ''));
+    if (lastBuf !== null) parts.push('búfer ' + Math.round(lastBuf) + 'ms');
     $('adbg').textContent = parts.join(' · ');
   }, 1000);
 
@@ -207,6 +212,7 @@
   }
   function onCommand(pid, m) {
     if (!m || !m.t) return;
+    try { if (audioCtx && audioCtx.state !== 'running' && audioCtx.resume) audioCtx.resume(); } catch (e) {}
     if (m.t === 'hello') { peers[pid].name = String(m.name || ''); sendTo(pid, stateMsg()); return; }
     if (m.t === 'stats?') { stats(pid); return; }
     if (m.t === 'add') { enqueue(m.song); return; }
@@ -231,6 +237,7 @@
     pr.then(function (report) {
       var bufferMs = null;
       report.forEach(function (r) { if (r.type === 'inbound-rtp' && (r.kind === 'audio' || r.mediaType === 'audio') && r.jitterBufferEmittedCount > 0) bufferMs = r.jitterBufferDelay / r.jitterBufferEmittedCount * 1000; });
+      lastBuf = bufferMs;
       sendTo(pid, { t: 'stats', bufferMs: bufferMs });
     }).catch(function () {});
   }
