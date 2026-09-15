@@ -55,7 +55,7 @@
 </div>
 <div id="hud"><div id="now"></div><div id="singer"></div><div id="next"></div></div>
 <div id="meterWrap"><div id="bar"></div></div>
-<div id="joinMini"><div class="q" id="qrMini"></div><div class="t">Únete: escanea<br>o código <b id="codeMini"></b></div></div>
+<div id="joinMini"><div class="q" id="qrMini"></div><div class="t">Únete: escanea<br>o código <b id="codeMini"></b><br><span id="adbg" style="color:#6b7280;font-size:1.8vh"></span></div></div>
 <div id="toast"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
@@ -164,14 +164,30 @@
       $('bar').style.width = Math.min(100, peak * 140) + '%';
     }, 80);
   }
+  var webOut = false;   // plan B: la voz por WebAudio (si el <audio> no arranca en este motor)
   function mix(pid, stream) {
     var p = peers[pid]; if (!p) return;
     var el = document.createElement('audio'); el.autoplay = true; el.setAttribute('playsinline', ''); el.srcObject = stream; document.body.appendChild(el); p.el = el;
     el.muted = false; el.volume = 1;
     var c = ctx();
-    if (c) { try { p.src = c.createMediaStreamSource(stream); p.src.connect(analyser); } catch (e) {} }
+    if (c) { try { p.src = c.createMediaStreamSource(stream); p.src.connect(analyser); if (webOut) { p.src.connect(c.destination); el.muted = true; } } catch (e) {} }
     var pr = el.play(); if (pr && pr.catch) pr.catch(function () { toast('Pulsa OK en el mando para activar el sonido', 6000); });
+    // Si a los 2,5 s el elemento sigue parado, este motor no lo reproduce: pasar a WebAudio
+    setTimeout(function () { if (p.el && p.el.paused) switchToWebAudio(); }, 2500);
   }
+  function switchToWebAudio() {
+    var c = ctx(); if (!c || webOut) return;
+    webOut = true;
+    for (var k in peers) { var p = peers[k]; try { if (p.src) { p.src.connect(c.destination); if (p.el) p.el.muted = true; } } catch (e) {} }
+    try { if (c.resume) c.resume(); } catch (e) {}
+  }
+  // Estado de la salida de audio en la esquina (para diagnosticar en el TV real)
+  setInterval(function () {
+    var parts = [];
+    for (var k in peers) { var el = peers[k].el; if (el) parts.push((el.paused ? 'audio parado' : 'audio ok') + (el.muted ? ' (mudo)' : '')); }
+    if (audioCtx) parts.push('ctx ' + audioCtx.state + (webOut ? ' →salida' : ''));
+    $('adbg').textContent = parts.join(' · ');
+  }, 1000);
 
   // ── Cola (el TV manda) ──
   function stateMsg() {
@@ -247,10 +263,14 @@
   }
 
   // OK del mando / toque: desbloquea audio y arranca el vídeo si estaba esperando
+  var unlocks = 0;
   function unlock() {
+    unlocks++;
     try { if (audioCtx && audioCtx.resume) audioCtx.resume(); } catch (e) {}
     for (var k in peers) { try { if (peers[k].el) peers[k].el.play(); } catch (e) {} }
     try { if (playerReady && queue.now) player.playVideo(); } catch (e) {}
+    // Segundo OK seguido: forzar la salida por WebAudio (si el <audio> «reproduce» pero no suena)
+    if (unlocks >= 2) switchToWebAudio();
   }
   document.addEventListener('keydown', unlock); document.addEventListener('click', unlock);
   window.addEventListener('message', function (e) { if (e && e.data && e.data.t === 'unlock') unlock(); });
