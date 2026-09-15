@@ -111,7 +111,7 @@
   //    silenciado hasta un toque). WebAudio solo mide el nivel para el medidor.
   function ctx() {
     if (audioCtx) return audioCtx;
-    try { var AC = window.AudioContext || window.webkitAudioContext; audioCtx = AC ? new AC({ latencyHint: 0 }) : null; } catch (e) { audioCtx = null; }
+    try { var AC = window.AudioContext || window.webkitAudioContext; audioCtx = null; try { audioCtx = new AC({ latencyHint: 'interactive' }); } catch (e2) { audioCtx = new AC(); } } catch (e) { audioCtx = null; }
     if (audioCtx) startMeter();
     return audioCtx;
   }
