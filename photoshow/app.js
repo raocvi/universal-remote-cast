@@ -34,7 +34,7 @@
             return;
           }
           if (m.t === 'show') { if (m.lang) show.setLang(m.lang); if (m.template) show.setTemplate(m.template); if (m.music) show.setMusic(m.music); show.setTitle(m.title || '', m.subtitle || ''); show.play(); return; }
-          if (m.t === 'hello') { if (m.lang) show.setLang(m.lang); return; }
+          if (m.t === 'hello') { if (m.lang) show.setLang(m.lang); link.send(pid, { t: 'photos', n: photos }); return; }
           if (m.t === 'play') { show.play(); return; }
           if (m.t === 'pause') { show.pause(); return; }
           if (m.t === 'template') { show.setTemplate(m.v); return; }

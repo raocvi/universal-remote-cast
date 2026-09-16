@@ -1294,7 +1294,8 @@
     this.cost += cost; this.frameCount++;
     if (delta > 0.025 || cost > 18) this.slow++;
     if (this.frameCount >= 120) {
-      if (this.quality > 0 && (this.slow > 45 || this.cost / this.frameCount > 15)) {
+      // Suelo en 1280 px: a 960 el TV de 65" se ve borroso (informe del dueño, build 145).
+      if (this.quality > 1 && (this.slow > 45 || this.cost / this.frameCount > 15)) {
         this.quality--; this.resize();
       }
       this.frameCount = this.slow = this.cost = 0;
