@@ -1337,18 +1337,33 @@
       }
     }
   };
+  // Estado limpio garantizado: en el Cast del Samsung (build 146) los cuadros anteriores
+  // se acumulaban, así que no se confía en save/restore ni en el relleno base: se vacía el
+  // lienzo entero y se reponen alfa, mezcla, sombra, recorte y transformación a mano.
+  function reset(c, w, h) {
+    try { c.restore(); c.restore(); c.restore(); c.restore(); } catch (_) {}
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
+    c.shadowBlur = 0; c.shadowOffsetX = 0; c.shadowOffsetY = 0; c.shadowColor = 'rgba(0,0,0,0)';
+    try { c.filter = 'none'; } catch (_) {}
+    c.clearRect(0, 0, w, h);
+    c.fillStyle = '#000'; c.fillRect(0, 0, w, h);
+  }
   Show.prototype.draw = function () {
     if (this.dead) return;
     var c = this.fc;
+    reset(c, this.front.width, this.front.height);
     c.setTransform(this.scaleX, 0, 0, this.scaleY, 0, 0);
-    c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
+    this.frames = (this.frames || 0) + 1;
     if (!this.scene) waiting(c, this);
     else if (this.scene.kind !== 'photo') cover(c, this, this.scene, this.scene.kind === 'outro');
     else templates[this.opts.template](c, this, this.scene, clamp(this.scene.time / this.scene.length, 0, 1));
     var view = this.ctx;
+    reset(view, this.view.width, this.view.height);
     view.setTransform(this.scaleX, 0, 0, this.scaleY, 0, 0);
     if (this.previous) composite(view, this, clamp(this.transition / this.transitionLength, 0, 1));
     else view.drawImage(this.front, 0, 0, W, H);
+    if (!this.scene) this.diagnostic(view);
     if (this.scene) {
       var light = this.opts.template === 'editorial' || this.opts.template === 'film';
       var count = this.photos.length, scene = this.scene;
@@ -1357,6 +1372,25 @@
       rect(view, 96, 1058, 1728, 3, light ? 'rgba(25,24,21,.14)' : 'rgba(255,255,255,.2)');
       rect(view, 96, 1058, 1728 * progress, 3, light ? '#4b4437' : '#fff');
     }
+  };
+  Show.prototype.diagnostic = function (view) {
+    var d = [];
+    try {
+      var p = this.fc.getImageData(4, 4, 1, 1).data, q = view.getImageData(4, 4, 1, 1).data;
+      d.push('FC ' + p[0] + ',' + p[1] + ',' + p[2] + ',' + p[3] + ' · VIEW ' + q[0] + ',' + q[1] + ',' + q[2] + ',' + q[3]);
+    } catch (e) { d.push('SIN GETIMAGEDATA'); }
+    try {
+      var t = canvas(2, 2).getContext('2d');
+      t.save(); t.globalAlpha = 0.25; t.restore();
+      d.push('RESTORE ' + (t.globalAlpha === 1 ? 'OK' : 'ROTO ' + t.globalAlpha));
+    } catch (e2) { d.push('RESTORE ?'); }
+    d.push('INST ' + (global.__urpShows || 0) + ' · ID ' + this.id + ' · CUADROS ' + this.frames + ' · ' + this.opts.lang + ' · ' + navigator.userAgent.replace(/^.*\((.*?)\).*$/, '$1').slice(0, 60));
+    var light = this.opts.template === 'editorial' || this.opts.template === 'film';
+    view.save(); view.setTransform(this.scaleX, 0, 0, this.scaleY, 0, 0);
+    view.globalAlpha = 1; view.globalCompositeOperation = 'source-over';
+    view.font = '400 18px ' + MONO; view.textAlign = 'right'; view.fillStyle = light ? '#8a8578' : '#8c8a98';
+    for (var i = 0; i < d.length; i++) view.fillText(d[i], 1808, 1000 - (d.length - 1 - i) * 24);
+    view.restore();
   };
   Show.prototype.frame = function (stamp) {
     this.raf = 0; if (this.dead || document.hidden) return;
@@ -1405,7 +1439,9 @@
       // Si el guion se cargó dos veces (otro cierre), los escenarios huérfanos se retiran:
       // dos lienzos apilados pintaban los textos encima unos de otros.
       Array.prototype.slice.call(document.querySelectorAll('.urp-photoshow')).forEach(function (el) { try { el.parentNode.removeChild(el); } catch (_) {} });
-      instance = new Show(container, opts); return global.UrpPhotoShow;
+      global.__urpShows = (global.__urpShows || 0) + 1;
+      instance = new Show(container, opts); instance.id = Math.random().toString(36).slice(2, 6).toUpperCase();
+      return global.UrpPhotoShow;
     },
     addPhoto: function (photoData) { return instance ? instance.add(photoData) : Promise.resolve(false); },
     play: function () { if (instance) instance.play(); },
