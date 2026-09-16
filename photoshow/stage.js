@@ -390,13 +390,55 @@
     el.height = h;
     return el;
   }
+  // Sonda: el motor del receptor de Cast del Samsung (build 146) ignoraba el alfa de colores,
+  // degradados y texturas: halos como discos opacos y grano a plena fuerza. Se comprueba una
+  // vez y cada efecto elige su ruta: alfa real o mezcla (globalAlpha, lighter, multiply, overlay).
+  var Caps = (function () {
+    var r = { fillAlpha: true, gradAlpha: true, imgAlpha: true, blend: true, ok: true };
+    try {
+      var el = canvas(4, 4), c = el.getContext('2d');
+      function px() { return c.getImageData(1, 1, 1, 1).data[0]; }
+      c.fillStyle = '#000'; c.fillRect(0, 0, 4, 4);
+      c.fillStyle = 'rgba(255,255,255,0.5)'; c.fillRect(0, 0, 4, 4);
+      var v = px(); r.fillAlpha = v > 80 && v < 180;
+      c.fillStyle = '#000'; c.fillRect(0, 0, 4, 4);
+      var g = c.createLinearGradient(0, 0, 4, 0);
+      g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+      c.fillStyle = g; c.fillRect(0, 0, 4, 4); r.gradAlpha = px() < 40;
+      var t = canvas(4, 4), tc = t.getContext('2d'), d = tc.createImageData(4, 4);
+      for (var i = 0; i < d.data.length; i += 4) { d.data[i] = d.data[i + 1] = d.data[i + 2] = 255; d.data[i + 3] = 0; }
+      tc.putImageData(d, 0, 0);
+      c.fillStyle = '#000'; c.fillRect(0, 0, 4, 4); c.drawImage(t, 0, 0); r.imgAlpha = px() < 40;
+      c.fillStyle = '#fff'; c.fillRect(0, 0, 4, 4);
+      c.globalCompositeOperation = 'multiply'; c.fillStyle = '#808080'; c.fillRect(0, 0, 4, 4);
+      c.globalCompositeOperation = 'source-over';
+      v = px(); r.blend = v > 80 && v < 180;
+    } catch (e) { /* sin getImageData: se asume motor correcto */ }
+    // ?caps=off en la vista previa: fuerza las rutas alternativas para revisarlas en escritorio.
+    try { if (/[?&]caps=off/.test(global.location.search)) r.fillAlpha = r.gradAlpha = r.imgAlpha = false; } catch (e2) {}
+    r.ok = r.fillAlpha && r.gradAlpha && r.imgAlpha;
+    r.tag = 'F' + (r.fillAlpha ? 1 : 0) + 'G' + (r.gradAlpha ? 1 : 0) + 'I' + (r.imgAlpha ? 1 : 0) + 'B' + (r.blend ? 1 : 0);
+    return r;
+  }());
+  var RGBA = /^rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)$/;
+  // Pinta con un color; si el motor ignora el alfa del color, lo aplica por globalAlpha.
+  function solid(c, color, draw) {
+    var m = !Caps.fillAlpha && typeof color === 'string' ? RGBA.exec(color) : null;
+    if (!m) { draw(color); return; }
+    var a = parseFloat(m[4]);
+    if (a <= 0) return;
+    c.save(); c.globalAlpha *= Math.min(1, a); draw('rgb(' + m[1] + ',' + m[2] + ',' + m[3] + ')'); c.restore();
+  }
   function rect(c, x, y, w, h, color) {
-    c.fillStyle = color;
-    c.fillRect(x, y, w, h);
+    solid(c, color, function (col) { c.fillStyle = col; c.fillRect(x, y, w, h); });
   }
   function line(c, x, y, ex, ey, color, width) {
     c.beginPath(); c.moveTo(x, y); c.lineTo(ex, ey);
-    c.strokeStyle = color; c.lineWidth = width || 1; c.stroke();
+    solid(c, color, function (col) { c.strokeStyle = col; c.lineWidth = width || 1; c.stroke(); });
+  }
+  function dot(c, x, y, r, color) {
+    c.beginPath(); c.arc(x, y, r, 0, 2 * PI);
+    solid(c, color, function (col) { c.fillStyle = col; c.fill(); });
   }
   function rounded(c, x, y, w, h, r) {
     r = Math.min(r, w / 2, h / 2);
@@ -407,10 +449,9 @@
     c.lineTo(x, y + r); c.quadraticCurveTo(x, y, x + r, y); c.closePath();
   }
   function text(c, value, x, y, size, family, color, weight, align) {
-    c.fillStyle = color || '#fff';
     c.font = (weight || '400') + ' ' + size + 'px ' + (family || SANS);
     c.textAlign = align || 'left'; c.textBaseline = 'alphabetic';
-    c.fillText(String(value), x, y);
+    solid(c, color || '#fff', function (col) { c.fillStyle = col; c.fillText(String(value), x, y); });
   }
   function tracked(c, value, x, y, size, spacing, color, family) {
     c.fillStyle = color; c.font = '500 ' + size + 'px ' + (family || SANS);
@@ -465,33 +506,59 @@
     else { c.beginPath(); c.rect(x, y, w, h); }
     c.clip(); c.drawImage(p.image, x + b.x, y + b.y, b.w, b.h); c.restore();
   }
+  function grey(v) { v = Math.round(clamp(v, 0, 255)); return 'rgb(' + v + ',' + v + ',' + v + ')'; }
   function shade(c, x, y, w, h, alpha, bottom) {
     var g = c.createLinearGradient(0, y, 0, y + h);
-    g.addColorStop(0, 'rgba(0,0,0,' + (bottom ? 0 : alpha) + ')');
-    g.addColorStop(1, 'rgba(0,0,0,' + (bottom ? alpha : 0) + ')');
-    rect(c, x, y, w, h, g);
+    if (Caps.gradAlpha || !Caps.blend) {
+      g.addColorStop(0, 'rgba(0,0,0,' + (bottom ? 0 : alpha) + ')');
+      g.addColorStop(1, 'rgba(0,0,0,' + (bottom ? alpha : 0) + ')');
+      if (Caps.gradAlpha) { rect(c, x, y, w, h, g); return; }
+      // Ni alfa ni mezclas: mejor sin sombra que con un rectángulo negro encima de la foto.
+      return;
+    }
+    // Oscurecer por multiplicación: de blanco (nada) a gris (alpha).
+    g.addColorStop(0, grey(bottom ? 255 : 255 * (1 - alpha)));
+    g.addColorStop(1, grey(bottom ? 255 * (1 - alpha) : 255));
+    c.save(); c.globalCompositeOperation = 'multiply'; c.fillStyle = g; c.fillRect(x, y, w, h); c.restore();
   }
   function glow(c, x, y, r, color, opacity) {
     // Gradiente radial: halo amplio sin recalcular filtros gaussianos por frame.
     var g = c.createRadialGradient(x, y, 0, x, y, r);
-    g.addColorStop(0, rgb(color, opacity));
-    g.addColorStop(0.42, rgb(color, opacity * 0.38));
-    g.addColorStop(1, rgb(color, 0));
-    rect(c, x - r, y - r, r * 2, r * 2, g);
+    if (Caps.gradAlpha) {
+      g.addColorStop(0, rgb(color, opacity));
+      g.addColorStop(0.42, rgb(color, opacity * 0.38));
+      g.addColorStop(1, rgb(color, 0));
+      rect(c, x - r, y - r, r * 2, r * 2, g);
+      return;
+    }
+    // Sin alfa en degradados: luz aditiva (lighter), del color atenuado al negro.
+    var k = opacity * 0.6;   // aditivo: más suave que el alfa real para no quemar fondos claros
+    g.addColorStop(0, rgb(color.map(function (n) { return n * k; })));
+    g.addColorStop(0.42, rgb(color.map(function (n) { return n * k * 0.38; })));
+    g.addColorStop(1, '#000');
+    c.save(); c.globalCompositeOperation = 'lighter'; c.fillStyle = g; c.fillRect(x - r, y - r, r * 2, r * 2); c.restore();
   }
   function grainTexture() {
     var el = canvas(192, 192), c = el.getContext('2d'), d = c.createImageData(192, 192);
     var rng = Logic.random(774);
     for (var i = 0; i < d.data.length; i += 4) {
-      var n = rng() > 0.5 ? 255 : 0;
-      d.data[i] = d.data[i + 1] = d.data[i + 2] = n;
-      d.data[i + 3] = Math.floor(rng() * 22);
+      if (Caps.imgAlpha) {
+        var n = rng() > 0.5 ? 255 : 0;
+        d.data[i] = d.data[i + 1] = d.data[i + 2] = n;
+        d.data[i + 3] = Math.floor(rng() * 22);
+      } else {
+        // Gris medio ±10 y mezcla overlay: neutro donde no hay grano, sin depender del alfa.
+        var v = 128 + Math.floor(rng() * 21) - 10;
+        d.data[i] = d.data[i + 1] = d.data[i + 2] = v; d.data[i + 3] = 255;
+      }
     }
     c.putImageData(d, 0, 0); return el;
   }
   function grain(c, s, alpha, moving) {
     if (s.quality === 0) return;
-    c.save(); c.globalAlpha *= alpha;
+    if (!Caps.imgAlpha && !Caps.blend) return;
+    c.save();
+    if (Caps.imgAlpha) c.globalAlpha *= alpha; else c.globalCompositeOperation = 'overlay';
     var shift = moving && !s.reduced ? Math.floor(s.clock * 8) % 8 * 23 : 0;
     c.translate(-shift, -shift);
     c.fillStyle = s.noisePattern || (s.noisePattern = c.createPattern(s.noise, 'repeat'));
@@ -499,9 +566,14 @@
   }
   function vignette(c, strength) {
     var g = c.createRadialGradient(960, 490, 270, 960, 540, 1100);
-    g.addColorStop(0, 'rgba(0,0,0,0)');
-    g.addColorStop(1, 'rgba(0,0,0,' + strength + ')');
-    rect(c, 0, 0, W, H, g);
+    if (Caps.gradAlpha) {
+      g.addColorStop(0, 'rgba(0,0,0,0)');
+      g.addColorStop(1, 'rgba(0,0,0,' + strength + ')');
+      rect(c, 0, 0, W, H, g); return;
+    }
+    if (!Caps.blend) return;
+    g.addColorStop(0, '#fff'); g.addColorStop(1, grey(255 * (1 - strength)));
+    c.save(); c.globalCompositeOperation = 'multiply'; c.fillStyle = g; c.fillRect(0, 0, W, H); c.restore();
   }
   function sample(image) {
     try {
@@ -582,8 +654,7 @@
       s.particles.slice(0, s.quality === 1 ? 12 : 26).forEach(function (q) {
         var y = (q.y - time * q.speed + 2160) % 1080;
         var a = 0.2 + 0.28 * (0.5 + 0.5 * Math.sin(time + q.x));
-        c.beginPath(); c.arc(q.x + Math.sin(time * 0.2 + q.y) * 18, y, q.r, 0, 2 * PI);
-        c.fillStyle = rgb(pal.light, a); c.fill();
+        dot(c, q.x + Math.sin(time * 0.2 + q.y) * 18, y, q.r, rgb(pal.light, a));
       });
     }
   }
@@ -594,7 +665,7 @@
     var x = i % 2 ? 185 : 720, y = 188, w = 1020, h = 600;
     if (current.h > current.w) { w = 690; x = i % 2 ? 260 : 955; }
     c.save(); c.translate(0, (1 - e) * 48);
-    if (s.quality > 0) {
+    if (s.quality > 0 && Caps.gradAlpha) {
       // Reflejo invertido, comprimido y fundido: conserva el encuadre de la foto.
       // La máscara vive en una superficie pequeña; no oscurece el halo del suelo.
       var rc = s.reflection.getContext('2d');
@@ -744,6 +815,7 @@
     }
     line(c, 112, 969, 740, 969, light ? '#c7c1b6' : '#373640', 2);
     line(c, 112, 969, 112 + 628 * received / s.opts.total, 969, ink, 3);
+    text(c, 'MOTOR ' + Caps.tag + ' · ' + s.view.width + 'px · Q' + s.quality, 1808, 1030, 20, MONO, light ? '#8a8578' : '#6a6878', '400', 'right');
     grain(c, s, 0.28, false);
   }
 
@@ -1072,6 +1144,7 @@
     this.ctx = this.view.getContext('2d', { alpha: false });
     this.fc = this.front.getContext('2d', { alpha: false });
     this.bc = this.back.getContext('2d', { alpha: false });
+    [this.ctx, this.fc, this.bc].forEach(function (x) { try { x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high'; } catch (_) {} });
     this.status = document.createElement('div'); this.status.className = 'urp-status';
     this.status.setAttribute('role', 'status'); this.status.setAttribute('aria-live', 'polite');
     this.badge = document.createElement('div'); this.badge.className = 'urp-pause';
@@ -1095,7 +1168,9 @@
     this.view.style.width = Math.round(W * fit) + 'px';
     this.view.style.height = Math.round(H * fit) + 'px';
     // Nunca se renderiza a 4K por accidente: el contenido fuente es ≤1920 px.
-    var limit = [960, 1280, 1920][this.quality];
+    // Resolución fija Full HD: la calidad adaptativa recorta efectos (grano, sombras,
+    // desenfoque), nunca píxeles: a 960/1280 el TV de 65" se veía pixelado (build 146).
+    var limit = 1920;
     var pixels = Math.min(limit, Math.max(640, Math.round(W * fit * Math.min(global.devicePixelRatio || 1, 1.5))));
     this.view.width = this.front.width = this.back.width = pixels;
     this.view.height = this.front.height = this.back.height = Math.round(pixels * 9 / 16);
@@ -1294,9 +1369,8 @@
     this.cost += cost; this.frameCount++;
     if (delta > 0.025 || cost > 18) this.slow++;
     if (this.frameCount >= 120) {
-      // Suelo en 1280 px: a 960 el TV de 65" se ve borroso (informe del dueño, build 145).
-      if (this.quality > 1 && (this.slow > 45 || this.cost / this.frameCount > 15)) {
-        this.quality--; this.resize();
+      if (this.quality > 0 && (this.slow > 45 || this.cost / this.frameCount > 15)) {
+        this.quality--; this.noisePattern = null; this.previous = false;
       }
       this.frameCount = this.slow = this.cost = 0;
     }
@@ -1328,6 +1402,9 @@
         throw new TypeError('UrpPhotoShow.mount necesita un elemento contenedor.');
       }
       if (instance) instance.destroy();
+      // Si el guion se cargó dos veces (otro cierre), los escenarios huérfanos se retiran:
+      // dos lienzos apilados pintaban los textos encima unos de otros.
+      Array.prototype.slice.call(document.querySelectorAll('.urp-photoshow')).forEach(function (el) { try { el.parentNode.removeChild(el); } catch (_) {} });
       instance = new Show(container, opts); return global.UrpPhotoShow;
     },
     addPhoto: function (photoData) { return instance ? instance.add(photoData) : Promise.resolve(false); },

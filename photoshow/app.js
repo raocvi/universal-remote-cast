@@ -13,9 +13,12 @@
   api.mount = function (container, opts) {
     var base = (opts && opts.base) || (document.currentScript && document.currentScript.src ? document.currentScript.src.replace(/[^\/]*$/, '') : 'https://raocvi.github.io/universal-remote-cast/photoshow/');
     var code = String((opts && opts.code) || '').toUpperCase();
-    var pending = 2;
+    // Montaje idempotente: un segundo mensaje «page» no vuelve a cargar los guiones
+    // (cada carga creaba otro escenario encima del anterior) ni deja el puente anterior vivo.
+    if (api.mounted) api.unmount();
+    var pending = (window.UrpPhotoShow ? 0 : 1) + (window.UrpStageLink ? 0 : 1);
     function ready() {
-      if (--pending) return;
+      if (pending > 0 && --pending) return;
       if (!window.UrpPhotoShow || !window.UrpStageLink) return;
       var show = window.UrpPhotoShow;
       var photos = 0;
@@ -44,8 +47,9 @@
       });
       api.link = link; api.show = show; api.mounted = true;
     }
-    load(base + 'stage.js', ready);
-    load(base + 'bridge.js', ready);
+    if (!pending) { ready(); return; }
+    if (!window.UrpPhotoShow) load(base + 'stage.js', ready);
+    if (!window.UrpStageLink) load(base + 'bridge.js', ready);
   };
   api.unmount = function () {
     try { if (api.link) api.link.stop(); } catch (e) {}
